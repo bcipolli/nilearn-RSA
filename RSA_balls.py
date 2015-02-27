@@ -27,11 +27,12 @@ def average_data(func_img, stim_labels, labels):
 
 class RsaSearchlight(object):
 
-    def __init__(self, mask_img, seeds_img, memory_params=None):
+    def __init__(self, mask_img, seeds_img, radius=10., memory_params=None):
         # Defs
         self.memory_params = memory_params or dict()
         self.seeds_img = seeds_img
         self.mask_img = mask_img
+        self.radius = radius
 
     def rsa_on_ball_axis_1(self, sphere_data):
         """
@@ -52,7 +53,7 @@ class RsaSearchlight(object):
         self.n_seeds = int(self.seeds_img.get_data().sum())
 
         self.sphere_masker = NiftiSpheresMasker(
-            seeds=self.seeds_img, mask_img=self.seeds_img, radius=5,
+            seeds=self.seeds_img, mask_img=self.seeds_img, radius=self.radius,
             xform_fn=self.rsa_on_ball_axis_1, standardize=False)  # no mem
         self.sphere_masker.fit()
 
@@ -116,9 +117,15 @@ class RsaSearchlight(object):
 
 
 class SearchlightAnalysis(object):
-    def __init__(self, dataset, subj_idx=0, memory_params=None):
+    def __init__(self, dataset, subj_idx=0, memory_params=None,
+                 radius=10., smoothing_fwhm=None, standardize=True):
         self.dataset = dataset
         self.subj_idx = subj_idx
+        self.radius = radius
+        self.smoothing_fwhm = smoothing_fwhm
+        self.standardize = standardize
+
+        # Caching stuff
         self.memory_params = memory_params or dict(memory='nilearn_cache',
                                                    memory_level=10,
                                                    verbose=10)
@@ -143,7 +150,8 @@ class SearchlightAnalysis(object):
         # Compute mask
         print("Computing mask...")
         self.masker = NiftiMasker(mask_strategy='epi', detrend=False,
-                                  smoothing_fwhm=None, standardize=True,
+                                  smoothing_fwhm=self.smoothing_fwhm,
+                                  standardize=self.standardize,
                                   **self.memory_params)
         self.masker.fit(self.func_img)
         self.mask_img = self.masker.mask_img_
@@ -161,7 +169,8 @@ class SearchlightAnalysis(object):
                                                     self.labels)
         self.searchlight = RsaSearchlight(mask_img=self.mask_img,
                                           seeds_img=seeds_img,
-                                          memory_params=self.memory_params)
+                                          memory_params=self.memory_params,
+                                          radius=self.radius)
         self.searchlight.fit()
         self.searchlight.transform(func_img=self.func_img)
 

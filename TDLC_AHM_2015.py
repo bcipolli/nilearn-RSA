@@ -26,7 +26,8 @@ def compute_best_detector(label, all_labels):
     return best_detector
 
 
-def examine_detector_correlations(subj_idx=0, force=False, visualize=True):
+def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
+                                  force=False, visualize=True):
     # Compute RSA within VT
     RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
@@ -99,7 +100,10 @@ def examine_detector_correlations(subj_idx=0, force=False, visualize=True):
     return voxelwise_corr, voxelwise_pval, analysis.labels
 
 
-def group_examine_detector_correlations(visualize=True):
+def group_examine_detector_correlations(visualize=True,
+                                        force=False,
+                                        radius=10.,
+                                        smoothing_fwhm=None):
     n_bins = 25
     n_subj = 6
     n_labels = 9
@@ -109,35 +113,41 @@ def group_examine_detector_correlations(visualize=True):
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
     for subj_idx in range(n_subj):
-        corr, pval, labels = examine_detector_correlations(subj_idx=subj_idx,
-                                                           force=True,
-                                                           visualize=visualize)
+        corr, pval, labels = examine_detector_correlations(
+            subj_idx=subj_idx,
+            radius=radius,
+            smoothing_fwhm=smoothing_fwhm,
+            force=force,
+            visualize=visualize)
         for li in range(n_labels):
-            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins)
-            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins)
+            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins, density=True)
+            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins, density=True)
 
     fh1 = plt.figure(figsize=(18, 10))
     fh2 = plt.figure(figsize=(18, 10))
-    bar_bins = lambda bins: [(bins[bi - 1] + bins[bi]) / 2.
-                             for bi in range(1, len(bins))]
+    bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
+                                        for bi in range(1, len(bins))])
     bar_width = lambda bins: bins[1] - bins[0]
     for li in range(n_labels):
 
         mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
         std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
         ax1 = fh1.add_subplot(3, 3, li + 1)
-        ax1.bar(bar_bins(corr_bins), mean_corr_hist, yerr=std_corr_hist,
-                width=bar_width(corr_bins))
+        ax1.bar(bar_bins(corr_bins) * bar_width(corr_bins), mean_corr_hist,
+                yerr=std_corr_hist, width=bar_width(corr_bins))
         ax1.set_title('Correlation (%s)' % labels[li])
 
         mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
         std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
         ax2 = fh2.add_subplot(3, 3, li + 1)
-        ax2.bar(bar_bins(pval_bins), mean_pval_hist, yerr=std_pval_hist,
-                width=bar_width(pval_bins))
+        ax2.bar(bar_bins(pval_bins) * bar_width(pval_bins), mean_pval_hist,
+                yerr=std_pval_hist, width=bar_width(pval_bins))
         ax2.set_title('p-values (%s)' % labels[li])
 
     plt.show()
 
 if __name__ == '__main__':
-    group_examine_detector_correlations(visualize=True)
+    group_examine_detector_correlations(visualize=True,
+                                        force=False,
+                                        radius=5.,
+                                        smoothing_fwhm=None)
