@@ -251,27 +251,46 @@ def group_examine_correlations(analysis_fn,
                                smoothing_fwhm=None):
     n_bins = 25
     n_subj = 6
+    sorted_labels = ['face', 'house', 'cat', 'bottle', 'scissors',
+                     'shoe', 'chair', 'scrambledpix', 'rest']
     n_labels = 9
-    n_compares = n_labels * (n_labels - 1) / 2
 
     # Data to save off
     corr_hists = np.empty((n_subj, n_labels, n_bins))
     pval_hists = np.empty(corr_hists.shape)
-    RSA_data = np.empty((n_subj, n_compares))
+    RSA_data = np.empty((n_subj, n_labels, n_labels))
 
     # Get all subject data; save into histograms and means.
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
     for subj_idx in range(n_subj):
-        corr, pval, labels, RSA_data[subj_idx] = analysis_fn(
+        corr, pval, labels, RSA_compares = analysis_fn(
             subj_idx=subj_idx,
             radius=radius,
             smoothing_fwhm=smoothing_fwhm,
             force=force,
             visualize=visualize)
+
+        # Find desired label indices
+        lbl_idx = np.empty((n_labels,))
         for li in range(n_labels):
-            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins, density=True)
-            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins, density=True)
+            lbl_idx[li] = np.nonzero(np.asarray(labels) == sorted_labels[li])[0][0]
+
+        # Unwind data (summarize & sort)
+        for li in range(n_labels):
+            corr_hists[subj_idx, lbl_idx[li]], _ = np.histogram(corr[li], corr_bins, density=True)
+            pval_hists[subj_idx, lbl_idx[li]], _ = np.histogram(pval[li], pval_bins, density=True)
+        RSA_data[subj_idx, :, :] = squareform(RSA_compares)
+        RSA_data[subj_idx] = RSA_data[subj_idx, lbl_idx.tolist()]  # reorder
+        RSA_data[subj_idx] = RSA_data[subj_idx, :, lbl_idx.tolist()]  # reorder
+        labels = sorted_labels
+
+    # Eliminate resting state data
+    corr_hists = corr_hists[:-1]
+    pval_hists = pval_hists[:-1]
+    RSA_data = RSA_data[:, :-1, :-1]
+    labels = labels[:-1]
+    n_labels = len(labels)
 
     # Plot mean correlation and p-value histograms
     fh1 = plt.figure(figsize=(18, 10))
@@ -302,17 +321,32 @@ def group_examine_correlations(analysis_fn,
     fh3 = plt.figure(figsize=(18, 10))
     for subj_idx in range(n_subj + 1):
         if subj_idx < n_subj:
-            mat = squareform(RSA_data[subj_idx])
+            mat = RSA_data[subj_idx]
             subj_id = str(subj_idx)
         else:
-            mat = squareform(RSA_data.mean(axis=0))
+            mat = RSA_data.mean(axis=0)
             subj_id = 'mean'
         ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
-        ax3.imshow(1. - mat - np.eye(n_labels), interpolation='nearest')
+        ax3.imshow(1. - mat - np.eye(n_labels),
+                   interpolation='nearest',
+                   vmin=-1., vmax=1.)
         ax3.set_title('Subject %s similarity' % subj_id)
 
         ax3.set_yticks(list(range(n_labels)))
         ax3.set_yticklabels(labels)
+        ax3.set_xticks([])  # remove x-ticks
+
+    # Plot haxby figure (ish)
+    confusion_mat = 1. - RSA_data.mean(axis=0)
+    confusion_mat = confusion_mat
+    fh4 = plt.figure(figsize=(18, 10))
+    for li, label in enumerate(labels):
+        ax4 = fh4.add_subplot(4, 2, li + 1)
+        ax4.bar(range(n_labels), confusion_mat[li])
+        ax4.set_title(label)
+        ax4.set_xticks(list(range(n_labels)))
+        ax4.set_xticklabels(labels)
+    fh4.subplots_adjust(hspace=0.4)
     plt.show()
 
 
@@ -321,4 +355,4 @@ if __name__ == '__main__':
                                visualize=False,
                                force=False,
                                radius=10.,
-                               smoothing_fwhm=6.)
+                               smoothing_fwhm=None)
