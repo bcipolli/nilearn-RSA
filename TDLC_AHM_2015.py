@@ -32,7 +32,7 @@ def compute_detector(label, all_labels):
     n_labels = len(all_labels)
     best_detector = np.nan * np.empty((n_labels * (n_labels - 1) / 2.,))
     idx = 0
-    li = np.nonzero(np.asarray(all_labels) == label)[0]
+    li = np.nonzero(np.asarray(all_labels) == label)[0][0]
     for li1 in range(n_labels):
         for li2 in range(li1 + 1, n_labels):
             if li1 == li or li2 == li:
