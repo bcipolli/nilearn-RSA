@@ -1,0 +1,7 @@
+*.sublime*
+.DS_Store
+*.pyc
+
+*.nii
+*.png
+nilearn_cache
