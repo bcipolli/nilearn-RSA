@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import shelve
 from scipy.stats import pearsonr
 from scipy.spatial.distance import squareform
@@ -246,13 +245,15 @@ def group_examine_correlations(detector_fn,
     # Plot haxby figure (ish)
     confusion_mat = 1. - RSA_data.mean(axis=0)
     confusion_mat = confusion_mat
-    fh4 = plt.figure(figsize=(14, 10))
+    short_labels = [lbl[:5] for lbl in labels]
+    fh4 = plt.figure(figsize=(12, 10))
+    plt_order = [1, 3, 5, 7, 2, 4, 6, 8]
     for li, label in enumerate(labels):
-        ax4 = fh4.add_subplot(4, 2, li + 1)
-        ax4.bar(range(n_labels), confusion_mat[li])
+        ax4 = fh4.add_subplot(4, 2, plt_order[li])
+        ax4.bar(np.arange(n_labels) - 0.5, confusion_mat[li])
         ax4.set_title(label)
         ax4.set_xticks(list(range(n_labels)))
-        ax4.set_xticklabels(labels[:9])
+        ax4.set_xticklabels(short_labels)
         ax4.set_ylim([-0.2, 1.0])
     fh4.subplots_adjust(hspace=0.4)
     plt.show()
