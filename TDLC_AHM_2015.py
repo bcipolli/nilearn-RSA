@@ -142,78 +142,6 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
 
 
-def group_examine_correlations(analysis_fn,
-                               visualize=True,
-                               force=False,
-                               radius=10.,
-                               smoothing_fwhm=None):
-    n_bins = 25
-    n_subj = 6
-    n_labels = 9
-    n_compares = n_labels * (n_labels - 1) / 2
-
-    # Data to save off
-    corr_hists = np.empty((n_subj, n_labels, n_bins))
-    pval_hists = np.empty(corr_hists.shape)
-    RSA_data = np.empty((n_subj, n_compares))
-
-    # Get all subject data; save into histograms and means.
-    corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
-    pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
-    for subj_idx in range(n_subj):
-        corr, pval, labels, RSA_data[subj_idx] = analysis_fn(
-            subj_idx=subj_idx,
-            radius=radius,
-            smoothing_fwhm=smoothing_fwhm,
-            force=force,
-            visualize=visualize)
-        for li in range(n_labels):
-            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins, density=True)
-            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins, density=True)
-
-    # Plot mean correlation and p-value histograms
-    fh1 = plt.figure(figsize=(18, 10))
-    fh2 = plt.figure(figsize=(18, 10))
-    bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
-                                        for bi in range(1, len(bins))])
-    bar_width = lambda bins: bins[1] - bins[0]
-    for li in range(n_labels):
-
-        mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
-        std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
-        ax1 = fh1.add_subplot(3, 3, li + 1)
-        ax1.bar(bar_bins(corr_bins),
-                mean_corr_hist * bar_width(corr_bins),
-                yerr=std_corr_hist * bar_width(corr_bins),
-                width=bar_width(corr_bins))
-        ax1.set_title('Correlation (%s)' % labels[li])
-
-        mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
-        std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
-        ax2 = fh2.add_subplot(3, 3, li + 1)
-        ax2.bar(bar_bins(pval_bins), mean_pval_hist * bar_width(pval_bins),
-                yerr=std_pval_hist * bar_width(corr_bins),
-                width=bar_width(pval_bins))
-        ax2.set_title('p-values (%s)' % labels[li])
-
-    # Plot the mean correlation matrix
-    fh3 = plt.figure(figsize=(18, 10))
-    for subj_idx in range(n_subj + 1):
-        if subj_idx < n_subj:
-            mat = squareform(RSA_data[subj_idx])
-            subj_id = str(subj_idx)
-        else:
-            mat = squareform(RSA_data.mean(axis=0))
-            subj_id = 'mean'
-        ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
-        ax3.imshow(1. - mat - np.eye(n_labels), interpolation='nearest')
-        ax3.set_title('Subject %s similarity' % subj_id)
-
-        ax3.set_yticks(list(range(n_labels)))
-        ax3.set_yticklabels(labels)
-    plt.show()
-
-
 def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
                                force=False, visualize=True):
     # Compute RSA within VT
@@ -314,6 +242,79 @@ def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
 
     # Return the computation
     return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
+
+
+def group_examine_correlations(analysis_fn,
+                               visualize=True,
+                               force=False,
+                               radius=10.,
+                               smoothing_fwhm=None):
+    n_bins = 25
+    n_subj = 6
+    n_labels = 9
+    n_compares = n_labels * (n_labels - 1) / 2
+
+    # Data to save off
+    corr_hists = np.empty((n_subj, n_labels, n_bins))
+    pval_hists = np.empty(corr_hists.shape)
+    RSA_data = np.empty((n_subj, n_compares))
+
+    # Get all subject data; save into histograms and means.
+    corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
+    pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
+    for subj_idx in range(n_subj):
+        corr, pval, labels, RSA_data[subj_idx] = analysis_fn(
+            subj_idx=subj_idx,
+            radius=radius,
+            smoothing_fwhm=smoothing_fwhm,
+            force=force,
+            visualize=visualize)
+        for li in range(n_labels):
+            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins, density=True)
+            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins, density=True)
+
+    # Plot mean correlation and p-value histograms
+    fh1 = plt.figure(figsize=(18, 10))
+    fh2 = plt.figure(figsize=(18, 10))
+    bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
+                                        for bi in range(1, len(bins))])
+    bar_width = lambda bins: bins[1] - bins[0]
+    for li in range(n_labels):
+
+        mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
+        std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
+        ax1 = fh1.add_subplot(3, 3, li + 1)
+        ax1.bar(bar_bins(corr_bins),
+                mean_corr_hist * bar_width(corr_bins),
+                yerr=std_corr_hist * bar_width(corr_bins),
+                width=bar_width(corr_bins))
+        ax1.set_title('Correlation (%s)' % labels[li])
+
+        mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
+        std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
+        ax2 = fh2.add_subplot(3, 3, li + 1)
+        ax2.bar(bar_bins(pval_bins), mean_pval_hist * bar_width(pval_bins),
+                yerr=std_pval_hist * bar_width(corr_bins),
+                width=bar_width(pval_bins))
+        ax2.set_title('p-values (%s)' % labels[li])
+
+    # Plot the mean correlation matrix
+    fh3 = plt.figure(figsize=(18, 10))
+    for subj_idx in range(n_subj + 1):
+        if subj_idx < n_subj:
+            mat = squareform(RSA_data[subj_idx])
+            subj_id = str(subj_idx)
+        else:
+            mat = squareform(RSA_data.mean(axis=0))
+            subj_id = 'mean'
+        ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
+        ax3.imshow(1. - mat - np.eye(n_labels), interpolation='nearest')
+        ax3.set_title('Subject %s similarity' % subj_id)
+
+        ax3.set_yticks(list(range(n_labels)))
+        ax3.set_yticklabels(labels)
+    plt.show()
+
 
 if __name__ == '__main__':
     group_examine_correlations(analysis_fn=examine_detector_correlations,
