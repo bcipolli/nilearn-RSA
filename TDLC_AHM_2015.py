@@ -99,6 +99,45 @@ def examine_detector_correlations(subj_idx=0, force=False, visualize=True):
     return voxelwise_corr, voxelwise_pval, analysis.labels
 
 
-if __name__ == '__main__':
-    print examine_detector_correlations(subj_idx=2, force=True)
+def group_examine_detector_correlations(visualize=True):
+    n_bins = 25
+    n_subj = 6
+    n_labels = 9
+    corr_hists = np.empty((n_subj, n_labels, n_bins))
+    pval_hists = np.empty(corr_hists.shape)
+
+    corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
+    pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
+    for subj_idx in range(n_subj):
+        corr, pval, labels = examine_detector_correlations(subj_idx=subj_idx,
+                                                           force=True,
+                                                           visualize=visualize)
+        for li in range(n_labels):
+            corr_hists[subj_idx, li], _ = np.histogram(corr[li], corr_bins)
+            pval_hists[subj_idx, li], _ = np.histogram(pval[li], pval_bins)
+
+    fh1 = plt.figure(figsize=(18, 10))
+    fh2 = plt.figure(figsize=(18, 10))
+    bar_bins = lambda bins: [(bins[bi - 1] + bins[bi]) / 2.
+                             for bi in range(1, len(bins))]
+    bar_width = lambda bins: bins[1] - bins[0]
+    for li in range(n_labels):
+
+        mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
+        std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
+        ax1 = fh1.add_subplot(3, 3, li + 1)
+        ax1.bar(bar_bins(corr_bins), mean_corr_hist, yerr=std_corr_hist,
+                width=bar_width(corr_bins))
+        ax1.set_title('Correlation (%s)' % labels[li])
+
+        mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
+        std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
+        ax2 = fh2.add_subplot(3, 3, li + 1)
+        ax2.bar(bar_bins(pval_bins), mean_pval_hist, yerr=std_pval_hist,
+                width=bar_width(pval_bins))
+        ax2.set_title('p-values (%s)' % labels[li])
+
     plt.show()
+
+if __name__ == '__main__':
+    group_examine_detector_correlations(visualize=True)
