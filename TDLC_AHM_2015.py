@@ -67,7 +67,7 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
                                        smoothing_fwhm=smoothing_fwhm)
         analysis.fit()
         analysis.transform(seeds_img=analysis.vt_mask_img)
-        analysis.save(RSA_img_filename)
+        # analysis.save(RSA_img_filename)
 
     # Compare the result to the optimally object-selective DSM
     n_labels = len(analysis.labels)
@@ -75,19 +75,21 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     voxelwise_corr = np.empty((n_labels, n_seeds))
     voxelwise_pval = np.empty((n_labels, n_seeds))
 
+    RSA_data = analysis.searchlight.RSA_data
     for li, label in enumerate(analysis.labels):
         best_detector = compute_best_detector(label, analysis.labels)
         # Compare it to every voxel.
-        RSA_data = analysis.searchlight.RSA_data
         for si in range(n_seeds):
             pr, pv = pearsonr(best_detector, RSA_data[si].T)
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 0. if np.isnan(pv) else pv
+    good_seeds = np.logical_not(np.isnan(RSA_data.mean(axis=1)))
+    mean_RSA_data = RSA_data[good_seeds].mean(axis=0).copy()
 
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
     corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-    nibabel.save(corr_img, corr_img_filename)
+    # nibabel.save(corr_img, corr_img_filename)
 
     # Plot the result
     if visualize:
@@ -137,7 +139,7 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
             del analysis
 
     # Return the computation
-    return voxelwise_corr, voxelwise_pval, analysis.labels
+    return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
 
 
 def group_examine_correlations(analysis_fn,
@@ -148,15 +150,18 @@ def group_examine_correlations(analysis_fn,
     n_bins = 25
     n_subj = 6
     n_labels = 9
+    n_compares = n_labels * (n_labels - 1) / 2
 
     # Data to save off
     corr_hists = np.empty((n_subj, n_labels, n_bins))
     pval_hists = np.empty(corr_hists.shape)
+    RSA_data = np.empty((n_subj, n_compares))
 
+    # Get all subject data; save into histograms and means.
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
     for subj_idx in range(n_subj):
-        corr, pval, labels = analysis_fn(
+        corr, pval, labels, RSA_data[subj_idx] = analysis_fn(
             subj_idx=subj_idx,
             radius=radius,
             smoothing_fwhm=smoothing_fwhm,
@@ -191,6 +196,21 @@ def group_examine_correlations(analysis_fn,
                 width=bar_width(pval_bins))
         ax2.set_title('p-values (%s)' % labels[li])
 
+    # Plot the mean correlation matrix
+    fh3 = plt.figure(figsize=(18, 10))
+    for subj_idx in range(n_subj + 1):
+        if subj_idx < n_subj:
+            mat = squareform(RSA_data[subj_idx])
+            subj_id = str(subj_idx)
+        else:
+            mat = squareform(RSA_data.mean(axis=0))
+            subj_id = 'mean'
+        ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
+        ax3.imshow(1. - mat - np.eye(n_labels), interpolation='nearest')
+        ax3.set_title('Subject %s similarity' % subj_id)
+
+        ax3.set_yticks(list(range(n_labels)))
+        ax3.set_yticklabels(labels)
     plt.show()
 
 
@@ -238,7 +258,7 @@ def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
     good_seeds = np.logical_not(np.isnan(RSA_data.mean(axis=1)))
-    mean_RSA_data = RSA_data[good_seeds].mean(axis=0)
+    mean_RSA_data = RSA_data[good_seeds].mean(axis=0).copy()
 
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
@@ -296,8 +316,8 @@ def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
 
 if __name__ == '__main__':
-    group_examine_correlations(analysis_fn=examine_class_correlations,
-                               visualize=True,
+    group_examine_correlations(analysis_fn=examine_detector_correlations,
+                               visualize=False,
                                force=False,
                                radius=10.,
                                smoothing_fwhm=6.)
