@@ -32,19 +32,26 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
     analysis_filename = 'haxby_RSA_analysis_subj%02d.db' % subj_idx
+    shelf_key = 'r%.2f s%.2f subj%02d' % (radius, smoothing_fwhm or 0., subj_idx)
 
-    if not force and os.path.exists(analysis_filename):
-        analysis = nibabel.load(analysis_filename)
+    if not force:
+        shelf = shelve.open(analysis_filename)
+        try:
+            analysis = shelf[shelf_key]
+            analysis.loaded = True
+        except Exception as e:
+            print "Load error: %s" % e
+        finally:
+            shelf.close()
+            del shelf
 
-    else:
-        analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx)
+    if 'analysis' not in locals():
+        analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx,
+                                       radius=radius,
+                                       smoothing_fwhm=smoothing_fwhm)
         analysis.fit()
         analysis.transform(seeds_img=analysis.vt_mask_img)
         analysis.save(RSA_img_filename)
-
-        # Save the result
-        # shelf = shelve.open(analysis_filename)
-        # shelf[subj_idx] = analysis
 
     # Compare the result to the optimally object-selective DSM
     n_labels = len(analysis.labels)
@@ -95,6 +102,18 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
                              bg_img=analysis.anat_img,
                              display_mode='z', cut_coords=1,
                              title=titles, shape=(3, 3))
+
+    # Save the result last as we need to modify the object
+    #   in order to save.
+    if not getattr(analysis, 'loaded', False):
+        shelf = shelve.open(analysis_filename, writeback=True)
+        try:
+            analysis.searchlight.sphere_masker.xform_fn = None
+            shelf[shelf_key] = analysis
+            shelf.sync()
+            shelf.close()
+        except Exception as e:
+            print e
 
     # Return the computation
     return voxelwise_corr, voxelwise_pval, analysis.labels
@@ -149,5 +168,5 @@ def group_examine_detector_correlations(visualize=True,
 if __name__ == '__main__':
     group_examine_detector_correlations(visualize=True,
                                         force=False,
-                                        radius=5.,
+                                        radius=10.,
                                         smoothing_fwhm=None)

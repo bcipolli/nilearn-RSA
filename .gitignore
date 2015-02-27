@@ -4,4 +4,6 @@
 
 *.nii
 *.png
+*.db
+*.pkl
 nilearn_cache
