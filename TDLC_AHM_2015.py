@@ -305,22 +305,27 @@ def group_examine_correlations(analysis_fn,
         mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
         std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
         ax1 = fh1.add_subplot(3, 3, li + 1)
-        ax1.bar(bar_bins(corr_bins),
+        ax1.bar(bar_bins(corr_bins) - bar_width(corr_bins) / 2.,
                 mean_corr_hist * bar_width(corr_bins),
                 yerr=std_corr_hist * bar_width(corr_bins),
                 width=bar_width(corr_bins))
         ax1.set_title('Correlation (%s)' % labels[li])
+        ax1.set_ylim([0., 0.4])
+        ax1.set_xlim([-0.6, 0.6])
 
         mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
         std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
         ax2 = fh2.add_subplot(3, 3, li + 1)
-        ax2.bar(bar_bins(pval_bins), mean_pval_hist * bar_width(pval_bins),
+        ax2.bar(bar_bins(pval_bins) - bar_width(pval_bins) / 2.,
+                mean_pval_hist * bar_width(pval_bins),
                 yerr=std_pval_hist * bar_width(corr_bins),
                 width=bar_width(pval_bins))
         ax2.set_title('p-values (%s)' % labels[li])
+        ax2.set_ylim([0., 0.2])
+        ax2.set_xlim([0., 1.0])
 
     # Plot the mean correlation matrix
-    fh3 = plt.figure(figsize=(18, 10))
+    fh3 = plt.figure(figsize=(14, 10))
     for subj_idx in range(n_subj + 1):
         if subj_idx < n_subj:
             mat = RSA_data[subj_idx]
@@ -341,13 +346,14 @@ def group_examine_correlations(analysis_fn,
     # Plot haxby figure (ish)
     confusion_mat = 1. - RSA_data.mean(axis=0)
     confusion_mat = confusion_mat
-    fh4 = plt.figure(figsize=(18, 10))
+    fh4 = plt.figure(figsize=(14, 10))
     for li, label in enumerate(labels):
         ax4 = fh4.add_subplot(4, 2, li + 1)
         ax4.bar(range(n_labels), confusion_mat[li])
         ax4.set_title(label)
         ax4.set_xticks(list(range(n_labels)))
-        ax4.set_xticklabels(labels)
+        ax4.set_xticklabels(labels[:9])
+        ax4.set_ylim([-0.2, 1.0])
     fh4.subplots_adjust(hspace=0.4)
     plt.show()
 
