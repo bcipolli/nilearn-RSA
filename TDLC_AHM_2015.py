@@ -177,15 +177,18 @@ def group_examine_correlations(analysis_fn,
         mean_corr_hist = corr_hists[:, li].mean(axis=0).flatten()
         std_corr_hist = corr_hists[:, li].std(axis=0).flatten()
         ax1 = fh1.add_subplot(3, 3, li + 1)
-        ax1.bar(bar_bins(corr_bins) * bar_width(corr_bins), mean_corr_hist,
-                yerr=std_corr_hist, width=bar_width(corr_bins))
+        ax1.bar(bar_bins(corr_bins),
+                mean_corr_hist * bar_width(corr_bins),
+                yerr=std_corr_hist * bar_width(corr_bins),
+                width=bar_width(corr_bins))
         ax1.set_title('Correlation (%s)' % labels[li])
 
         mean_pval_hist = pval_hists[:, li].mean(axis=0).flatten()
         std_pval_hist = pval_hists[:, li].std(axis=0).flatten()
         ax2 = fh2.add_subplot(3, 3, li + 1)
-        ax2.bar(bar_bins(pval_bins) * bar_width(pval_bins), mean_pval_hist,
-                yerr=std_pval_hist, width=bar_width(pval_bins))
+        ax2.bar(bar_bins(pval_bins), mean_pval_hist * bar_width(pval_bins),
+                yerr=std_pval_hist * bar_width(corr_bins),
+                width=bar_width(pval_bins))
         ax2.set_title('p-values (%s)' % labels[li])
 
     plt.show()
