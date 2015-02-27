@@ -41,111 +41,9 @@ def compute_detector(label, all_labels):
     return best_detector
 
 
-def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
-                                  force=False, visualize=True):
-    # Compute RSA within VT
-    RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
-    corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
-    analysis_filename = 'haxby_RSA_analysis_subj%02d.db' % subj_idx
-    shelf_key = 'r%.2f s%.2f subj%02d' % (radius, smoothing_fwhm or 0., subj_idx)
-
-    if not force:
-        print("Loading from shelf...")
-        shelf = shelve.open(analysis_filename)
-        try:
-            analysis = shelf[shelf_key]
-            analysis.loaded = True
-        except Exception as e:
-            print "Load error: %s" % e
-        finally:
-            shelf.close()
-            del shelf
-
-    if 'analysis' not in locals():
-        analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx,
-                                       radius=radius,
-                                       smoothing_fwhm=smoothing_fwhm)
-        analysis.fit()
-        analysis.transform(seeds_img=analysis.vt_mask_img)
-        # analysis.save(RSA_img_filename)
-
-    # Compare the result to the optimally object-selective DSM
-    n_labels = len(analysis.labels)
-    n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
-    voxelwise_corr = np.empty((n_labels, n_seeds))
-    voxelwise_pval = np.empty((n_labels, n_seeds))
-
-    RSA_data = analysis.searchlight.RSA_data
-    for li, label in enumerate(analysis.labels):
-        best_detector = compute_best_detector(label, analysis.labels)
-        # Compare it to every voxel.
-        for si in range(n_seeds):
-            pr, pv = pearsonr(best_detector, RSA_data[si].T)
-            voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
-            voxelwise_pval[li, si] = 0. if np.isnan(pv) else pv
-    good_seeds = np.logical_not(np.isnan(RSA_data.mean(axis=1)))
-    mean_RSA_data = RSA_data[good_seeds].mean(axis=0).copy()
-
-    # Save the result
-    sphere_masker = analysis.searchlight.sphere_masker
-    corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-    # nibabel.save(corr_img, corr_img_filename)
-    if hasattr(analysis.searchlight, 'n_voxels'):
-        print "Mean # voxels: %.2f" % analysis.searchlight.n_voxels.mean()
-
-    # Plot the result
-    if visualize:
-        # analysis.visualize()
-
-        # Plot detector
-        # fh1 = plt.figure(figsize=(18, 10))
-        # ax1 = fh1.add_subplot(3, 3, li + 1)
-        # sq = squareform(best_detector)  # + np.eye(n_labels)
-        # ax1.imshow(sq, interpolation='nearest')
-        # ax1.set_title('Best detector: %s' % label)
-
-        fh2 = plt.figure(figsize=(18, 10))
-        fh3 = plt.figure(figsize=(18, 10))
-        for li, label in enumerate(analysis.labels):
-
-            ax2 = fh2.add_subplot(3, 3, li + 1)
-            ax2.hist(voxelwise_corr[li], bins=25, normed=True)
-            ax2.set_title('Correlation values: %s' % label)
-
-            ax3 = fh3.add_subplot(3, 3, li + 1)
-            ax3.hist(voxelwise_pval[li], 25, normed=True)
-            ax3.set_title('Significance values: %s' % label)
-
-        fh4 = plt.figure(figsize=(18, 10))
-        titles = ['Vs. perfect %s detector' % l for l in analysis.labels]
-        plot_mosaic_stat_map(corr_img, colorbar=True, figure=fh4,
-                             bg_img=analysis.anat_img,
-                             display_mode='z', cut_coords=1,
-                             title=titles, shape=(3, 3))
-
-    # Save the result last as we need to modify the object
-    #   in order to save.
-    labels = analysis.labels
-    if not getattr(analysis, 'loaded', False):
-        print("Saving to shelf...")
-        shelf = shelve.open(analysis_filename, writeback=True)
-        try:
-            analysis.searchlight.sphere_masker.xform_fn = None
-            shelf[shelf_key] = analysis
-            shelf.sync()
-            shelf.close()
-        except Exception as e:
-            print e
-        finally:
-            del shelf
-            del analysis
-
-    # Return the computation
-    return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
-
-
-def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
-                               force=False, visualize=True):
+def examine_correlations(detector_fn, subj_idx=0, radius=10.,
+                         smoothing_fwhm=None,
+                         force=False, visualize=True):
     # Compute RSA within VT
     RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
@@ -180,11 +78,12 @@ def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
 
     RSA_data = analysis.searchlight.RSA_data
     for li, label in enumerate(analysis.labels):
-        best_detector = compute_best_detector(label, analysis.labels)
+        best_detector = 2 * detector_fn(label, analysis.labels)
+        idx = np.logical_not(np.isnan(best_detector))
         # Compare it to every voxel.
         for si in range(n_seeds):
-            idx = np.logical_not(np.isnan(best_detector))
             pr, pv = pearsonr(best_detector[idx], RSA_data[si, idx].T)
+            # pr = np.dot(best_detector[idx], RSA_data[si, idx].T) / (4.**2)
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
     good_seeds = np.logical_not(np.isnan(RSA_data.mean(axis=1)))
@@ -246,7 +145,7 @@ def examine_class_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     return voxelwise_corr, voxelwise_pval, labels, mean_RSA_data
 
 
-def group_examine_correlations(analysis_fn,
+def group_examine_correlations(detector_fn,
                                visualize=True,
                                force=False,
                                radius=10.,
@@ -266,7 +165,8 @@ def group_examine_correlations(analysis_fn,
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
     for subj_idx in range(n_subj):
-        corr, pval, labels, RSA_compares = analysis_fn(
+        corr, pval, labels, RSA_compares = examine_correlations(
+            detector_fn=detector_fn,
             subj_idx=subj_idx,
             radius=radius,
             smoothing_fwhm=smoothing_fwhm,
@@ -359,8 +259,10 @@ def group_examine_correlations(analysis_fn,
 
 
 if __name__ == '__main__':
-    group_examine_correlations(analysis_fn=examine_detector_correlations,
+    # compute_best_detector
+    # compute_detector
+    group_examine_correlations(detector_fn=compute_best_detector,
                                visualize=False,
                                force=False,
-                               radius=10.,
+                               radius=5.,
                                smoothing_fwhm=None)
