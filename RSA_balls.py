@@ -40,6 +40,7 @@ class RsaSearchlight(object):
         """
         similarity_data = pdist(sphere_data.T, 'correlation')
         self.RSA_data[self.si, :] = similarity_data
+        self.n_voxels[self.si] = sphere_data.shape[0]
         self.si += 1
 
         if self.memory_params.get('verbose', 0) > 1 and self.si % 100 == 99:
@@ -70,6 +71,7 @@ class RsaSearchlight(object):
 
         self.si = 0
         self.RSA_data = np.empty((self.n_seeds, n_compares))
+        self.n_voxels = np.empty((self.n_seeds))
 
         # Compute the RSA vector.
         self.RSA_std = self.sphere_masker.transform(func_img)

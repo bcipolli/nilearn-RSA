@@ -90,6 +90,8 @@ def examine_detector_correlations(subj_idx=0, radius=10., smoothing_fwhm=None,
     sphere_masker = analysis.searchlight.sphere_masker
     corr_img = sphere_masker.inverse_transform(voxelwise_corr)
     # nibabel.save(corr_img, corr_img_filename)
+    if hasattr(analysis.searchlight, 'n_voxels'):
+        print "Mean # voxels: %.2f" % analysis.searchlight.n_voxels.mean()
 
     # Plot the result
     if visualize:
