@@ -132,7 +132,8 @@ class SearchlightAnalysis(object):
         dataset_files = dataset_fn(n_subjects=self.subj_idx + 1)
         self.func_img = nibabel.load(dataset_files.func[self.subj_idx])
         self.vt_mask_img = nibabel.load(dataset_files.mask_vt[self.subj_idx])
-        self.anat_img = nibabel.load(dataset_files.anat[self.subj_idx])
+        self.anat_img = (dataset_files.anat[self.subj_idx] and
+                         nibabel.load(dataset_files.anat[self.subj_idx]))
         self.metadata = np.recfromcsv(dataset_files.session_target[self.subj_idx],
                                       delimiter=" ")
         self.stim_labels = self.metadata['labels']
