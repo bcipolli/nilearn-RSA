@@ -17,12 +17,37 @@ from nilearn.input_data import NiftiMasker, NiftiSpheresMasker
 from nilearn.plotting import plot_roi, plot_stat_map, plot_mosaic_stat_map
 
 
-def average_data(func_img, stim_labels, labels):
+def average_data(grouping, func_img, stim_labels, sessions=None):
+    class_labels = np.unique(stim_labels)
+    if sessions is not None:
+        sess_ids = np.unique(sessions)
+
     img_list = []
-    for stim_label in labels:
-        stim_img = index_img(func_img, stim_labels == stim_label)
-        img_list.append(mean_img(stim_img))
-    return concat_niimgs(img_list)
+    if grouping == 'class':
+        for class_label in class_labels:
+            stim_idx = stim_labels == class_label
+            stim_img = index_img(func_img, stim_idx)
+            img_list.append(mean_img(stim_img))
+        img_labels = class_labels
+
+    elif grouping == 'img':
+        n_sess = len(sess_ids)
+        n_exemplars = stim_labels.shape[0] / n_sess
+
+        idx = np.empty((n_exemplars, len(sess_ids)), dtype=int)
+        for sid in sess_ids:
+            idx[:, sid] = np.nonzero(sessions == sid)[0]
+
+        img_labels = []
+        for lidx in range(n_exemplars):
+            stim_img = index_img(func_img, idx[lidx].astype(int))
+            img_list.append(mean_img(stim_img))
+            img_labels.append(stim_labels[idx[lidx]][0])  # just one label needed.
+
+    else:
+        raise ValueError('Unrecognized grouping: %s' % grouping)
+
+    return concat_niimgs(img_list), np.asarray(img_labels)
 
 
 class RsaSearchlight(object):
@@ -120,12 +145,14 @@ class RsaSearchlight(object):
 
 class SearchlightAnalysis(object):
     def __init__(self, dataset, subj_idx=0, memory_params=None,
-                 radius=10., smoothing_fwhm=None, standardize=True):
+                 radius=10., smoothing_fwhm=None, standardize=True,
+                 grouping='class'):
         self.dataset = dataset
         self.subj_idx = subj_idx
         self.radius = radius
         self.smoothing_fwhm = smoothing_fwhm
         self.standardize = standardize
+        self.grouping = grouping
 
         # Caching stuff
         self.memory_params = memory_params or dict(memory='nilearn_cache',
@@ -145,9 +172,9 @@ class SearchlightAnalysis(object):
                          nibabel.load(dataset_files.anat[self.subj_idx]))
         self.metadata = np.recfromcsv(dataset_files.session_target[self.subj_idx],
                                       delimiter=" ")
-        self.stim_labels = self.metadata['labels']
-        self.labels = np.unique(self.stim_labels).tolist()
-        # sessions = metadata['chunks']
+        self.stim_labels = np.asarray(self.metadata['labels'])
+        self.class_labels = np.unique(self.stim_labels).tolist()
+        self.sessions = np.asarray(self.metadata['chunks'])
 
         # Compute mask
         print("Computing mask...")
@@ -166,9 +193,11 @@ class SearchlightAnalysis(object):
 
         # Average across sessions
         print("Averaging data...")
-        self.func_img = self.my_cache(average_data)(self.func_img,
-                                                    self.stim_labels,
-                                                    self.labels)
+        self.func_img, self.img_labels = self.my_cache(average_data)(
+            self.grouping,
+            self.func_img,
+            self.stim_labels,
+            self.sessions)
         self.searchlight = RsaSearchlight(mask_img=self.mask_img,
                                           seeds_img=seeds_img,
                                           memory_params=self.memory_params,
@@ -182,18 +211,22 @@ class SearchlightAnalysis(object):
         RSA_img = sphere_masker.inverse_transform(self.searchlight.RSA_data.T)
         nibabel.save(RSA_img, outfile)
 
+
     def visualize(self):
 
         # Functional image
         fh = plt.figure(figsize=(18, 10))
-        plot_mosaic_stat_map(self.func_img,
-                             bg_img=self.anat_img, title=self.labels,
+        class_img = self.my_cache(average_data)('class',
+                                                self.func_img,
+                                                self.img_labels)[0]
+        plot_mosaic_stat_map(class_img,
+                             bg_img=self.anat_img, title=self.class_labels,
                              figure=fh, shape=(5, 2))
 
         # Plot results
         self.searchlight.visualize(func_img=self.func_img,
                                    anat_img=self.anat_img,
-                                   labels=self.labels)
+                                   labels=self.img_labels)
 
 
 if __name__ == 'main':
