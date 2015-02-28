@@ -63,14 +63,14 @@ class RsaSearchlight(object):
         """
         Data: axis=1: [nvoxels, nslices]
         """
-        similarity_data = pdist(sphere_data.T, 'correlation')
-        self.RSA_data[self.si, :] = similarity_data
+        similarity_comparisons = pdist(sphere_data.T, 'correlation')
+        self.similarity_comparisons[self.si, :] = similarity_comparisons
         self.n_voxels[self.si] = sphere_data.shape[0]
         self.si += 1
 
         if self.memory_params.get('verbose', 0) > 1 and self.si % 100 == 99:
             print 'Processed %s of %s...' % (self.si + 1, self.n_seeds)
-        return similarity_data.std()  # output value for all slices
+        return similarity_comparisons.std()  # output value for all slices
 
     def fit(self):
         # Create mask
@@ -78,60 +78,76 @@ class RsaSearchlight(object):
 
         self.n_seeds = int(self.seeds_img.get_data().sum())
 
+        # Pass our xform_fn for a callback on each seed.
         self.sphere_masker = NiftiSpheresMasker(
             seeds=self.seeds_img, mask_img=self.seeds_img, radius=self.radius,
             xform_fn=self.rsa_on_ball_axis_1, standardize=False)  # no mem
         self.sphere_masker.fit()
 
-    def transform(self, func_img, anat_img=None, labels=None):
+    def transform(self, func_img):
         print("Transforming the image...")
 
-        # Store them off as associated with the RSA_* data
-        self.func_img = func_img
-        self.anat_img = anat_img
-        self.labels = labels
-
-        n_images = self.func_img.shape[3]
+        n_images = func_img.shape[3]
         n_compares = n_images * (n_images - 1) / 2
 
+        # These are computed within the callback.
         self.si = 0
-        self.RSA_data = np.empty((self.n_seeds, n_compares))
         self.n_voxels = np.empty((self.n_seeds))
+        self.similarity_comparisons = np.empty((self.n_seeds, n_compares))
 
-        # Compute the RSA vector.
-        self.RSA_std = self.sphere_masker.transform(func_img)
+        similarity_std = self.sphere_masker.transform(func_img)
 
-        return self.RSA_data
+        # Pull the values off of self, set locally.
+        n_voxels = self.n_voxels
+        similarity_comparisons = self.similarity_comparisons
+        delattr(self, 'si')
+        delattr(self, 'n_voxels')
+        delattr(self, 'similarity_comparisons')
 
-    def visualize(self, func_img=None, anat_img=None, labels=None,
-                  RSA_data=None, RSA_std=None):
+        return similarity_comparisons, similarity_std, n_voxels
+
+    def visualize(self, similarity_comparisons, similarity_std=None,
+                  anat_img=None, labels=None):
         print("Plotting the results...")
-        func_img = func_img or self.func_img
-        anat_img = anat_img or self.anat_img
-        labels = labels or self.labels
-        RSA_data = RSA_data or self.RSA_data
-        RSA_std = RSA_std or self.RSA_std
 
+        # Plot the seeds and mask
         plot_roi(self.sphere_masker.seeds_img_, bg_img=anat_img, title='seed img')
         plot_roi(self.sphere_masker.mask_img_, bg_img=anat_img, title='mask img')
 
-        RSA_std_img = self.sphere_masker.inverse_transform(self.RSA_std[0])
-        RSA_img = self.sphere_masker.inverse_transform(self.RSA_data.T)
-
-        # Plot results
-        plot_stat_map(RSA_std_img, bg_img=anat_img, title='RSA std')
-        plot_stat_map(index_img(RSA_img, 0), bg_img=anat_img,
+        # Plot (up to) twenty comparisons.
+        plotted_similarity = similarity_comparisons[:, 0]
+        plotted_img = self.sphere_masker.inverse_transform(plotted_similarity.T)
+        plot_stat_map(plotted_img, bg_img=anat_img,
                       title='RSA comparison %s vs. %s' % tuple(labels[:2]))
 
-        titles = []
-        for ai, label1 in enumerate(labels):
-            for bi, label2 in enumerate(labels[(ai + 1):]):
-                titles.append('%s vs. %s' % (label1, label2))
+        # Plot mosaic of up to 20
+
+        # Choose the comparisons
+        idx = np.linspace(0, similarity_comparisons.shape[1] - 1, 20)
+        idx = np.unique(np.round(idx).astype(int))  # if there's less than 20
+
+        # Make titles
+        if labels is None:
+            titles = None
+        else:
+            titles = []
+            for ai, label1 in enumerate(labels):
+                for bi, label2 in enumerate(labels[(ai + 1):]):
+                    titles.append('%s vs. %s' % (label1, label2))
+            np.asarray(titles)[idx]
+
+        # Create the image
+        plotted_similarity = similarity_comparisons[:, idx]
+        plotted_img = self.sphere_masker.inverse_transform(plotted_similarity.T)
 
         fh = plt.figure(figsize=(18, 10))
-        plot_mosaic_stat_map(RSA_img, colorbar=False, display_mode='z',
+        plot_mosaic_stat_map(plotted_img, colorbar=False, display_mode='z',
                              bg_img=anat_img, cut_coords=1, figure=fh,
                              title=titles)
+
+        if similarity_std is not None:
+            RSA_std_img = self.sphere_masker.inverse_transform(similarity_std[0])
+            plot_stat_map(RSA_std_img, bg_img=anat_img, title='RSA std')
 
         # faces compares
         # contains_faces = np.asarray(['face' in t for t in titles])
@@ -143,8 +159,8 @@ class RsaSearchlight(object):
         #                      shape=(4, 2))
 
 
-class SearchlightAnalysis(object):
-    def __init__(self, dataset, subj_idx=0, memory_params=None,
+class HaxbySearchlightAnalysis(object):
+    def __init__(self, dataset='haxby', subj_idx=0, memory_params=None,
                  radius=10., smoothing_fwhm=None, standardize=True,
                  grouping='class'):
         self.dataset = dataset
@@ -203,14 +219,14 @@ class SearchlightAnalysis(object):
                                           memory_params=self.memory_params,
                                           radius=self.radius)
         self.searchlight.fit()
-        self.searchlight.transform(func_img=self.func_img)
+        self.similarity_comparisons, self.similarity_std, self.n_voxels = \
+            self.searchlight.transform(func_img=self.func_img)
 
     def save(self, outfile):
         # Dump output file
         sphere_masker = self.searchlight.sphere_masker
         RSA_img = sphere_masker.inverse_transform(self.searchlight.RSA_data.T)
         nibabel.save(RSA_img, outfile)
-
 
     def visualize(self):
 
@@ -224,14 +240,15 @@ class SearchlightAnalysis(object):
                              figure=fh, shape=(5, 2))
 
         # Plot results
-        self.searchlight.visualize(func_img=self.func_img,
+        self.searchlight.visualize(self.similarity_comparisons,
+                                   self.similarity_std,
                                    anat_img=self.anat_img,
                                    labels=self.img_labels)
 
 
 if __name__ == 'main':
     subj_idx = 0
-    analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx)
+    analysis = HaxbySearchlightAnalysis(subj_idx=subj_idx)
     analysis.fit()
     analysis.transform()
     analysis.save('haxby_RSA_searchlight_subj%02d.nii' % subj_idx)

@@ -9,7 +9,7 @@ from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
 
-from RSA_balls import SearchlightAnalysis
+from RSA_balls import HaxbySearchlightAnalysis
 
 memory = Memory(cachedir='nilearn_cache', verbose=10)
 
@@ -77,6 +77,7 @@ def get_indices(sorted_class_labels, class_labels, img_labels):
         class_img_idx.append(np.nonzero(img_mask)[0])
     return class_class_idx, class_img_idx
 
+
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                          grouping='class', smoothing_fwhm=None,
                          force=False, visualize=True, standardize=True):
@@ -103,15 +104,15 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             del shelf
 
     if 'analysis' not in locals():
-        analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx,
-                                       radius=radius,
-                                       smoothing_fwhm=smoothing_fwhm,
-                                       grouping=grouping,
-                                       standardize=standardize)
+        analysis = HaxbySearchlightAnalysis(subj_idx=subj_idx,
+                                            radius=radius,
+                                            smoothing_fwhm=smoothing_fwhm,
+                                            grouping=grouping,
+                                            standardize=standardize)
         analysis.fit()
         analysis.transform(seeds_img=analysis.vt_mask_img)
         # analysis.save(RSA_img_filename)
-    print("Mean # voxels: %.2f" % np.asarray(analysis.searchlight.n_voxels).mean())
+    print("Mean # voxels: %.2f" % np.asarray(analysis.n_voxels).mean())
 
     # Compare the result to the optimally object-selective DSM
     print("Computing stats...")
@@ -119,7 +120,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     n_imgs = len(analysis.img_labels)
     n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
 
-    RSA_data = analysis.searchlight.RSA_data
+    RSA_data = analysis.similarity_comparisons
     voxelwise_corr, voxelwise_pval = compute_stats(RSA_data=RSA_data,
                                                    img_labels=analysis.img_labels,
                                                    detector_fn=detector_fn)
@@ -358,10 +359,11 @@ if __name__ == '__main__':
     # compute_best_detector
     # compute_detector
     group_examine_correlations(detector_fn=compute_best_detector,
-                               visualize=False,
+                               visualize=True,
                                force=False,
-                               radius=5.,
+                               radius=10.,
                                smoothing_fwhm=None,
                                grouping='img',
                                standardize=True,
+                               remove_rest=True,
                                resort_stims=True)
