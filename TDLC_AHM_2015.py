@@ -187,7 +187,8 @@ def group_examine_correlations(detector_fn,
                                remove_rest=False,
                                grouping='class',
                                radius=10.,
-                               smoothing_fwhm=None):
+                               smoothing_fwhm=None,
+                               resort_stims=False):
     n_bins = 25
     n_subj = 6
     sorted_class_labels = ['face', 'house', 'cat', 'bottle', 'scissors',
@@ -221,7 +222,7 @@ def group_examine_correlations(detector_fn,
         print "RSA: ", RSA_compares
         print "PVal: ", pval
 
-        # No sorting!
+        # Compute indices; no sorting!
         class_class_idx, class_img_idx = get_indices(class_labels, class_labels, img_labels)
 
         # Summarize data
@@ -232,14 +233,18 @@ def group_examine_correlations(detector_fn,
             pval_hists[subj_idx, class_class_idx[ci]], _ = np.histogram(pval[idx].flatten(), pval_bins, density=True)
 
     # Reorder data
-    class_class_idx, class_img_idx = get_indices(sorted_class_labels, class_labels, img_labels)
-    corr_hists = corr_hists[:, class_class_idx]
-    pval_hists = pval_hists[:, class_class_idx]
-    RSA_data = RSA_data[:, class_img_idx.flatten()]  # reorder
-    RSA_data = RSA_data[:, :, class_img_idx.flatten()]
-    class_labels = class_labels[class_class_idx]
-    img_labels = img_labels[class_img_idx].flatten()
-    del class_class_idx
+    if resort_stims:
+        class_class_idx, class_img_idx = get_indices(sorted_class_labels, class_labels, img_labels)
+        flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
+        corr_hists = corr_hists[:, class_class_idx]
+        pval_hists = pval_hists[:, class_class_idx]
+        RSA_data = RSA_data[:, flat_class_img_idx]  # reorder
+        RSA_data = RSA_data[:, :, flat_class_img_idx]
+        class_labels = class_labels[class_class_idx]
+        img_labels = img_labels[flat_class_img_idx]
+
+        # Refresh the index values
+        del class_class_idx
     _, class_img_idx = get_indices(class_labels, class_labels, img_labels)
     flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
 
@@ -345,4 +350,5 @@ if __name__ == '__main__':
                                force=False,
                                radius=5.,
                                smoothing_fwhm=None,
-                               grouping='img')
+                               grouping='img',
+                               resort_stims=True)
