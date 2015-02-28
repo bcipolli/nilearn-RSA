@@ -143,10 +143,12 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
         fh3 = plt.figure(figsize=(18, 10))
         class_imgs = []
         for ci, class_label in enumerate(analysis.class_labels):
-            class_idx = np.nonzero(analysis.img_labels == analysis.class_labels)
-            class_imgs.append(index_img(corr_img, class_idx))
-            class_corr = voxelwise_corr[class_idx].mean(axis=0)
-            class_pval = voxelwise_pval[class_idx].mean(axis=0)
+
+            idx = np.nonzero(analysis.img_labels == class_label)[0]
+            class_imgs.append(mean_img(index_img(corr_img, idx)))
+
+            class_corr = voxelwise_corr[idx].mean(axis=0)
+            class_pval = voxelwise_pval[idx].mean(axis=0)
 
             ax2 = fh2.add_subplot(3, 3, ci + 1)
             ax2.hist(class_corr, bins=25, normed=True)
