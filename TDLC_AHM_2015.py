@@ -78,7 +78,7 @@ def get_indices(sorted_class_labels, class_labels, img_labels):
 
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                          grouping='class', smoothing_fwhm=None,
-                         force=False, visualize=True):
+                         force=False, visualize=True, standardize=True):
     # Compute RSA within VT
     RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
@@ -90,6 +90,10 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
         shelf = shelve.open(analysis_filename)
         try:
             analysis = shelf[shelf_key]
+            for prop in ['subj_idx', 'radius', 'grouping',
+                         'smoothing_fwhm', 'standardize']:
+                assert (getattr(analysis, prop) == locals[prop],
+                        "analysis value didn't match for %s." % prop)
             analysis.loaded = True
         except Exception as e:
             print "Load error: %s" % e
@@ -101,7 +105,8 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
         analysis = SearchlightAnalysis('haxby', subj_idx=subj_idx,
                                        radius=radius,
                                        smoothing_fwhm=smoothing_fwhm,
-                                       grouping=grouping)
+                                       grouping=grouping,
+                                       standardize=standardize)
         analysis.fit()
         analysis.transform(seeds_img=analysis.vt_mask_img)
         analysis.save(RSA_img_filename)
@@ -188,6 +193,7 @@ def group_examine_correlations(detector_fn,
                                grouping='class',
                                radius=10.,
                                smoothing_fwhm=None,
+                               standardize=True,
                                resort_stims=False):
     n_bins = 25
     n_subj = 6
@@ -214,7 +220,8 @@ def group_examine_correlations(detector_fn,
             smoothing_fwhm=smoothing_fwhm,
             grouping=grouping,
             force=force,
-            visualize=visualize)
+            visualize=visualize,
+            standardize=standardize)
         class_labels = np.asarray(class_labels)
         img_labels = np.asarray(img_labels)
 
@@ -351,4 +358,5 @@ if __name__ == '__main__':
                                radius=5.,
                                smoothing_fwhm=None,
                                grouping='img',
+                               standardize=True,
                                resort_stims=True)
