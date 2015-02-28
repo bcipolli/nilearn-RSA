@@ -11,7 +11,7 @@ from sklearn.externals.joblib import Memory
 
 from RSA_balls import SearchlightAnalysis
 
-memory = Memory(cachedir='nilearn_cache', verbose=0)
+memory = Memory(cachedir='nilearn_cache', verbose=10)
 
 
 def compute_best_detector(li, img_labels):
@@ -41,6 +41,7 @@ def compute_detector(li, img_labels):
     return best_detector
 
 
+@memory.cache
 def compute_stats(RSA_data, img_labels, detector_fn):
     n_imgs = len(img_labels)
     n_seeds = RSA_data.shape[0]
@@ -109,9 +110,11 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                                        standardize=standardize)
         analysis.fit()
         analysis.transform(seeds_img=analysis.vt_mask_img)
-        analysis.save(RSA_img_filename)
+        # analysis.save(RSA_img_filename)
+    print("Mean # voxels: %.2f" % np.asarray(analysis.searchlight.n_voxels).mean())
 
     # Compare the result to the optimally object-selective DSM
+    print("Computing stats...")
     n_classes = len(analysis.class_labels)
     n_imgs = len(analysis.img_labels)
     n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
@@ -126,23 +129,22 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
     corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-    nibabel.save(corr_img, corr_img_filename)
+    # nibabel.save(corr_img, corr_img_filename)
 
     # Plot the result
     if visualize:
-        # analysis.visualize()
+        analysis.visualize()
 
         # Plot detector
-        # fh1 = plt.figure(figsize=(18, 10))
-        # ax1 = fh1.add_subplot(3, 3, li + 1)
-        # sq = squareform(best_detector)  # + np.eye(n_labels)
-        # ax1.imshow(sq, interpolation='nearest')
-        # ax1.set_title('Best detector: %s' % label)
-
+        fh1 = plt.figure(figsize=(18, 10))
         fh2 = plt.figure(figsize=(18, 10))
         fh3 = plt.figure(figsize=(18, 10))
         class_imgs = []
         for ci, class_label in enumerate(analysis.class_labels):
+            ax1 = fh1.add_subplot(3, 3, ci + 1)
+            sq = squareform(detector_fn(ci, analysis.class_labels))  # + np.eye(n_labels)
+            ax1.imshow(sq, interpolation='nearest')
+            ax1.set_title('Best detector: %s' % class_label)
 
             idx = np.nonzero(analysis.img_labels == class_label)[0]
             class_imgs.append(mean_img(index_img(corr_img, idx)))
@@ -160,7 +162,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
 
         fh4 = plt.figure(figsize=(18, 10))
         titles = ['Vs. perfect %s detector' % l for l in analysis.class_labels]
-        class_img = concat_niimgs(class_imgs)
+        class_img = concat_imgs(class_imgs)
         plot_mosaic_stat_map(class_img, colorbar=True, figure=fh4,
                              bg_img=analysis.anat_img,
                              display_mode='z', cut_coords=1,
@@ -179,7 +181,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             shelf.sync()
             shelf.close()
         except Exception as e:
-            print e
+            print "Error saving to shelve: %s." % e
         finally:
             del shelf
             del analysis
@@ -215,6 +217,7 @@ def group_examine_correlations(detector_fn,
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
 
     for subj_idx in range(n_subj):
+        # Compute the RSA, correlation to the selected detector.
         corr, pval, img_labels, class_labels, RSA_compares = examine_correlations(
             detector_fn=detector_fn,
             subj_idx=subj_idx,
