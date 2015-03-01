@@ -24,27 +24,32 @@ memory = Memory(cachedir='nilearn_cache', verbose=10)
 
 
 def compute_best_detector(li, img_labels):
-    # Compute the distance matrix for the optimal detector
-
+    # Compute the dissimilarity matrix for the optimal detector (correlation)
+    # Everything looks the same, except if it's compared to
+    #   this current class.  Then, it looks completely different.
     n_imgs = len(img_labels)
     best_detector = np.zeros((n_imgs * (n_imgs - 1) / 2.,))
     idx = 0
     for li1 in range(n_imgs):
+        matches1 = img_labels[li1] == img_labels[li]
         for li2 in range(li1 + 1, n_imgs):
-            if li1 == li or li2 == li:
+            matches2 = img_labels[li2] == img_labels[li]
+            if np.logical_xor(matches1, matches2):
                 best_detector[idx] = 1.
             idx += 1
     return best_detector
 
 
 def compute_detector(li, img_labels):
-    # Compute the optimal detector
+    # Compute the optimal dissimilarity detector (correlation)
     n_imgs = len(img_labels)
     best_detector = np.nan * np.empty((n_imgs * (n_imgs - 1) / 2.,))
     idx = 0
     for li1 in range(n_imgs):
+        matches1 = img_labels[li1] == img_labels[li]
         for li2 in range(li1 + 1, n_imgs):
-            if li1 == li or li2 == li:
+            matches2 = img_labels[li2] == img_labels[li]
+            if np.logical_xor(matches1, matches2):
                 best_detector[idx] = 1.
             idx += 1
     return best_detector
@@ -61,8 +66,7 @@ def compute_stats(RDM_data, img_labels, detector_fn):
     for li, img_label in enumerate(img_labels):
         # Retrieve the cur_count'th img_label in img_labels
         # e.g. the 3rd 'face' in img_labels.
-        best_detector = 2 * detector_fn(li, img_labels)
-
+        best_detector = detector_fn(li, img_labels)  # diag=0
         idx = np.logical_not(np.isnan(best_detector))
 
         # Compare it to every voxel.
