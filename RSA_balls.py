@@ -110,10 +110,21 @@ class RsaSearchlight(object):
                   anat_img=None, labels=None):
         print("Plotting the results...")
 
-        # Plot the seeds and mask
+        self.visualize_seeds(anat_img=anat_img)
+        self.visualize_mask(anat_img=anat_img)
+        self.visualize_comparisons(similarity_comparisons=similarity_comparisons,
+                                   labels=labels, anat_img=anat_img)
+        self.visualize_comparisons_std(similarity_std=similarity_std,
+                                       anat_img=anat_img)
+
+    def visualize_seeds(self, anat_img=None):
         plot_roi(self.sphere_masker.seeds_img_, bg_img=anat_img, title='seed img')
+
+    def visualize_mask(self, anat_img=None):
         plot_roi(self.sphere_masker.mask_img_, bg_img=anat_img, title='mask img')
 
+    def visualize_comparisons(self, similarity_comparisons, labels=None,
+                              anat_img=None):
         # Plot (up to) twenty comparisons.
         plotted_similarity = similarity_comparisons[:, 0]
         plotted_img = self.sphere_masker.inverse_transform(plotted_similarity.T)
@@ -145,6 +156,7 @@ class RsaSearchlight(object):
                              bg_img=anat_img, cut_coords=1, figure=fh,
                              title=titles)
 
+    def visualize_comparisons_std(self, similarity_std, anat_img=None):
         if similarity_std is not None:
             RSA_std_img = self.sphere_masker.inverse_transform(similarity_std[0])
             plot_stat_map(RSA_std_img, bg_img=anat_img, title='RSA std')
@@ -229,7 +241,15 @@ class HaxbySearchlightAnalysis(object):
         nibabel.save(RSA_img, outfile)
 
     def visualize(self):
+        self.visualize_func_img()
 
+        # Plot results
+        self.searchlight.visualize(self.similarity_comparisons,
+                                   self.similarity_std,
+                                   anat_img=self.anat_img,
+                                   labels=self.img_labels)
+
+    def visualize_func_img(self):
         # Functional image
         fh = plt.figure(figsize=(18, 10))
         class_img = self.my_cache(average_data)('class',
@@ -238,12 +258,6 @@ class HaxbySearchlightAnalysis(object):
         plot_mosaic_stat_map(class_img,
                              bg_img=self.anat_img, title=self.class_labels,
                              figure=fh, shape=(5, 2))
-
-        # Plot results
-        self.searchlight.visualize(self.similarity_comparisons,
-                                   self.similarity_std,
-                                   anat_img=self.anat_img,
-                                   labels=self.img_labels)
 
 
 if __name__ == 'main':

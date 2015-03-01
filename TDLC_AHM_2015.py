@@ -143,19 +143,31 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
 
     # Plot the result
     if visualize:
-        analysis.visualize()
+        analysis.visualize_func_img()
+        analysis.searchlight.visualize_comparisons(
+            similarity_comparisons=analysis.similarity_comparisons,
+            labels=analysis.img_labels, anat_img=analysis.anat_img)
+        analysis.searchlight.visualize_comparisons_std(
+            similarity_std=analysis.similarity_std,
+            anat_img=analysis.anat_img)
 
         # Plot detector
         fh1 = plt.figure(figsize=(18, 10))
+        class_imgs = []
+        n_rows = int(np.round(0.75 * np.sqrt(n_classes)))
+        n_cols = int(np.ceil(n_classes / float(n_rows)))
+        for ci, class_label in enumerate(analysis.class_labels):
+            ax1 = fh1.add_subplot(n_rows, n_cols, ci + 1)
+            li = np.nonzero(analysis.img_labels == class_label)[0][0]
+            sq = squareform(detector_fn(li, analysis.img_labels))
+            ax1.imshow(sq, interpolation='nearest')
+            ax1.set_title('Best detector: %s' % class_label)
+
+        # Plot correlation, p-value distributions over classes 
         fh2 = plt.figure(figsize=(18, 10))
         fh3 = plt.figure(figsize=(18, 10))
         class_imgs = []
         for ci, class_label in enumerate(analysis.class_labels):
-            ax1 = fh1.add_subplot(3, 3, ci + 1)
-            sq = squareform(detector_fn(ci, analysis.class_labels))  # + np.eye(n_labels)
-            ax1.imshow(sq, interpolation='nearest')
-            ax1.set_title('Best detector: %s' % class_label)
-
             idx = np.nonzero(analysis.img_labels == class_label)[0]
             class_imgs.append(mean_img(index_img(corr_img, idx)))
 
