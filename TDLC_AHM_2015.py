@@ -13,7 +13,7 @@ import shelve
 from scipy.stats import pearsonr
 from scipy.spatial.distance import squareform
 
-import nibabel
+# import nibabel
 from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
@@ -109,8 +109,8 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             analysis = shelf[shelf_key]
             for prop in ['subj_idx', 'radius', 'grouping',
                          'smoothing_fwhm', 'standardize']:
-                assert (getattr(analysis, prop) == locals[prop],
-                        "analysis value didn't match for %s." % prop)
+                assert getattr(analysis, prop) == locals[prop], \
+                        "analysis value didn't match for %s." % prop
             analysis.loaded = True
         except Exception as e:
             print "Load error: %s" % e
@@ -219,6 +219,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
 
 
 def group_examine_correlations(detector_fn,
+                               n_subj=6,
                                visualize=True,
                                force=False,
                                remove_rest=False,
@@ -228,10 +229,9 @@ def group_examine_correlations(detector_fn,
                                standardize=True,
                                resort_stims=False):
     n_bins = 25
-    n_subj = 6
     sorted_class_labels = ['face', 'house', 'cat', 'bottle', 'scissors',
                            'shoe', 'chair', 'scrambledpix', 'rest']
-    n_classes = 9
+    n_classes = len(sorted_class_labels)
     n_imgs = n_classes if grouping == 'class' else 121
     n_imgperclass = n_imgs / n_classes
 
@@ -386,6 +386,7 @@ if __name__ == '__main__':
     # compute_best_detector
     # compute_detector
     group_examine_correlations(detector_fn=compute_best_detector,
+                               n_subj=2,
                                visualize=True,
                                force=False,
                                radius=10.,
