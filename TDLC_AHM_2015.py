@@ -1,3 +1,12 @@
+"""
+"""
+
+# Massage paths
+import os
+import sys
+script_dir = os.path.abspath(os.path.dirname(__file__))
+sys.path = [os.path.join(script_dir, 'nilearn')] + sys.path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import shelve
