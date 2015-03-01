@@ -126,7 +126,7 @@ class RsaSearchlight(object):
         idx = np.linspace(0, similarity_comparisons.shape[1] - 1, 20)
         idx = np.unique(np.round(idx).astype(int))  # if there's less than 20
 
-        # Make titles
+        # Make (and filter) titles
         if labels is None:
             titles = None
         else:
@@ -134,7 +134,7 @@ class RsaSearchlight(object):
             for ai, label1 in enumerate(labels):
                 for bi, label2 in enumerate(labels[(ai + 1):]):
                     titles.append('%s vs. %s' % (label1, label2))
-            np.asarray(titles)[idx]
+            titles = np.asarray(titles)[idx]
 
         # Create the image
         plotted_similarity = similarity_comparisons[:, idx]
