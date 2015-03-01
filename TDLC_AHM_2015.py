@@ -51,9 +51,10 @@ def compute_detector(li, img_labels):
 
 
 @memory.cache
-def compute_stats(RSA_data, img_labels, detector_fn):
+def compute_stats(RDM_data, img_labels, detector_fn):
+    # RDM data: vector of pairwise dissimilarities
     n_imgs = len(img_labels)
-    n_seeds = RSA_data.shape[0]
+    n_seeds = RDM_data.shape[0]
     voxelwise_corr = np.empty((n_imgs, n_seeds))
     voxelwise_pval = np.empty((n_imgs, n_seeds))
 
@@ -63,10 +64,11 @@ def compute_stats(RSA_data, img_labels, detector_fn):
         best_detector = 2 * detector_fn(li, img_labels)
 
         idx = np.logical_not(np.isnan(best_detector))
+
         # Compare it to every voxel.
         for si in range(n_seeds):
-            pr, pv = pearsonr(best_detector[idx], RSA_data[si, idx].T)
-            # pr = np.dot(best_detector[idx], RSA_data[si, idx].T) / (4.**2)
+            pr, pv = pearsonr(best_detector[idx], RDM_data[si, idx].T)
+            # pr = np.dot(best_detector[idx], RDM_data[si, idx].T) / (4.**2)
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
 
@@ -129,12 +131,12 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     n_imgs = len(analysis.img_labels)
     n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
 
-    RSA_data = analysis.similarity_comparisons
-    voxelwise_corr, voxelwise_pval = compute_stats(RSA_data=RSA_data,
+    RDM_data = analysis.similarity_comparisons
+    voxelwise_corr, voxelwise_pval = compute_stats(RDM_data=RDM_data,
                                                    img_labels=analysis.img_labels,
                                                    detector_fn=detector_fn)
-    good_seeds = np.logical_not(np.isnan(RSA_data.mean(axis=1)))
-    mean_RSA_data = RSA_data[good_seeds].mean(axis=0).copy()
+    good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
+    mean_RDM_data = RDM_data[good_seeds].mean(axis=0).copy()
 
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
@@ -209,7 +211,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             del analysis
 
     # Return the computation
-    return voxelwise_corr, voxelwise_pval, img_labels, class_labels, mean_RSA_data
+    return voxelwise_corr, voxelwise_pval, img_labels, class_labels, mean_RDM_data
 
 
 def group_examine_correlations(detector_fn,
@@ -232,7 +234,7 @@ def group_examine_correlations(detector_fn,
     # Data to save off
     corr_hists = np.empty((n_subj, n_classes, n_bins))
     pval_hists = np.empty(corr_hists.shape)
-    RSA_data = np.empty((n_subj, n_imgs, n_imgs))
+    RDM_data = np.empty((n_subj, n_imgs, n_imgs))
 
     # Get all subject data; save into histograms and means.
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
@@ -260,7 +262,7 @@ def group_examine_correlations(detector_fn,
         class_class_idx, class_img_idx = get_indices(class_labels, class_labels, img_labels)
 
         # Summarize data
-        RSA_data[subj_idx, :, :] = squareform(RSA_compares)
+        RDM_data[subj_idx, :, :] = squareform(RSA_compares)
         for ci, class_label in enumerate(class_labels):
             idx = class_img_idx[ci]
             corr_hists[subj_idx, class_class_idx[ci]], _ = np.histogram(corr[idx].flatten(), corr_bins, density=True)
@@ -272,8 +274,8 @@ def group_examine_correlations(detector_fn,
         flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
         corr_hists = corr_hists[:, class_class_idx]
         pval_hists = pval_hists[:, class_class_idx]
-        RSA_data = RSA_data[:, flat_class_img_idx]  # reorder
-        RSA_data = RSA_data[:, :, flat_class_img_idx]
+        RDM_data = RDM_data[:, flat_class_img_idx]  # reorder
+        RDM_data = RDM_data[:, :, flat_class_img_idx]
         class_labels = class_labels[class_class_idx]
         img_labels = img_labels[flat_class_img_idx]
 
@@ -287,8 +289,8 @@ def group_examine_correlations(detector_fn,
         non_rest_idx = list(set(flat_class_img_idx) - set(class_img_idx[-1]))
         corr_hists = corr_hists[:-1]
         pval_hists = pval_hists[:-1]
-        RSA_data = RSA_data[:, non_rest_idx]
-        RSA_data = RSA_data[:, :, non_rest_idx]
+        RDM_data = RDM_data[:, non_rest_idx]
+        RDM_data = RDM_data[:, :, non_rest_idx]
         class_labels = class_labels[:-1]
         img_labels = img_labels[non_rest_idx]
         n_classes = len(class_labels)
@@ -331,10 +333,10 @@ def group_examine_correlations(detector_fn,
     fh3 = plt.figure(figsize=(14, 10))
     for subj_idx in range(n_subj + 1):
         if subj_idx < n_subj:
-            mat = RSA_data[subj_idx]
+            mat = RDM_data[subj_idx]
             subj_id = str(subj_idx)
         else:
-            mat = RSA_data.mean(axis=0)
+            mat = RDM_data.mean(axis=0)
             subj_id = 'mean'
         ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
         ax3.imshow(1. - mat - np.eye(n_imgs),
@@ -347,7 +349,7 @@ def group_examine_correlations(detector_fn,
         ax3.set_xticks([])  # remove x-ticks
 
     # FIGURE 4: Plot haxby figure (ish)
-    confusion_mat = 1. - RSA_data.mean(axis=0)
+    confusion_mat = 1. - RDM_data.mean(axis=0)
     confusion_mat = confusion_mat
     short_class_labels = [lbl[:5] for lbl in class_labels]
     fh4 = plt.figure(figsize=(12, 10))
