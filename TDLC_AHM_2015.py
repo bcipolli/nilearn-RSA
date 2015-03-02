@@ -126,7 +126,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
         compute_correlations(RDM_data=RDM_data, img_labels=analysis.img_labels,
                              detector_fn=detector_fn)
     good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
-    mean_RDM_data = RDM_data[good_seeds].mean(axis=0).copy()
+    mean_RDM_data = RDM_data[good_seeds].mean(axis=0)
 
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
@@ -216,13 +216,13 @@ def group_examine_correlations(detector_fn,
                                standardize=True):
     n_bins = 25
     n_classes = 9
-    n_imgs = n_classes if grouping == 'class' else 121
-    n_imgperclass = n_imgs / n_classes
+    n_imgperclass = np.asarray([9] * 8 + [49])  # rest has 49
+    n_imgs = n_classes if grouping == 'class' else np.sum(n_imgperclass)
 
     # Data to save off
     corr_hists = np.empty((n_subj, n_classes, n_bins))
     pval_hists = np.empty(corr_hists.shape)
-    RDM_data = np.empty((n_subj, n_imgs, n_imgs))
+    RDM_data = np.nan * np.zeros((n_subj, n_imgs, n_imgs))
 
     # Get all subject data; save into histograms and means.
     corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
@@ -268,6 +268,7 @@ def group_examine_correlations(detector_fn,
         class_labels = class_labels[:-1]
         img_labels = img_labels[non_rest_idx]
         n_classes = len(class_labels)
+        n_imgperclass = n_imgperclass[:-1]
         n_imgs = len(img_labels)
 
     # Plot mean (over subjects) correlation and p-value histograms
@@ -320,7 +321,7 @@ def group_examine_correlations(detector_fn,
                        vmin=-1., vmax=1.)
             ax7.set_title('Subject %s dissimilarity' % subj_id)
 
-            ax7.set_yticks(np.arange(0, n_imgs, n_imgperclass) + n_imgperclass / 2.)
+            ax7.set_yticks(np.cumsum(n_imgperclass) - n_imgperclass / 2.)
             ax7.set_yticklabels(class_labels)
             ax7.set_xticks([])  # remove x-ticks
 
