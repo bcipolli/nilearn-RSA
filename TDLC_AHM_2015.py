@@ -18,7 +18,7 @@ from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
 
-from RSA_balls import HaxbySearchlightAnalysis
+from RSA_balls import HaxbySearchlightAnalysis, get_class_indices
 
 memory = Memory(cachedir='nilearn_cache', verbose=10)
 
@@ -77,20 +77,6 @@ def compute_stats(RDM_data, img_labels, detector_fn):
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
 
     return voxelwise_corr, voxelwise_pval
-
-
-def get_indices(sorted_class_labels, class_labels, img_labels):
-    n_classes = len(class_labels)
-
-    # Find desired label indices
-    class_class_idx = np.empty((n_classes,), dtype=int)
-    class_img_idx = []  # can vary in length
-    for ci, sorted_class_label in enumerate(sorted_class_labels):
-        class_mask = class_labels == sorted_class_label
-        class_class_idx[ci] = np.nonzero(class_mask)[0]
-        img_mask = img_labels == sorted_class_label
-        class_img_idx.append(np.nonzero(img_mask)[0])
-    return class_class_idx, class_img_idx
 
 
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
@@ -228,9 +214,6 @@ def group_examine_correlations(detector_fn,
                                smoothing_fwhm=None,
                                standardize=True):
     n_bins = 25
-    sorted_class_labels = ['face', 'house', 'cat', 'bottle', 'scissors',
-                           'shoe', 'chair', 'scrambledpix', 'rest']
-    n_classes = len(sorted_class_labels)
     n_classes = 9
     n_imgs = n_classes if grouping == 'class' else 121
     n_imgperclass = n_imgs / n_classes
@@ -263,33 +246,20 @@ def group_examine_correlations(detector_fn,
         print "PVal: ", pval
 
         # Compute indices; no sorting!
-        class_class_idx, class_img_idx = get_indices(class_labels, class_labels, img_labels)
+        img_class_idx = get_class_indices(class_labels, img_labels)
 
         # Summarize data
         RDM_data[subj_idx, :, :] = squareform(RSA_compares)
         for ci, class_label in enumerate(class_labels):
-            idx = class_img_idx[ci]
-            corr_hists[subj_idx, class_class_idx[ci]], _ = np.histogram(corr[idx].flatten(), corr_bins, density=True)
-            pval_hists[subj_idx, class_class_idx[ci]], _ = np.histogram(pval[idx].flatten(), pval_bins, density=True)
+            idx = img_class_idx[ci]
+            corr_hists[subj_idx, ci], _ = np.histogram(corr[idx].flatten(), corr_bins, density=True)
+            pval_hists[subj_idx, ci], _ = np.histogram(pval[idx].flatten(), pval_bins, density=True)
 
-    # Reorder data
-    class_class_idx, class_img_idx = get_indices(sorted_class_labels, class_labels, img_labels)
-    flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
-    corr_hists = corr_hists[:, class_class_idx]
-    pval_hists = pval_hists[:, class_class_idx]
-    RDM_data = RDM_data[:, flat_class_img_idx]  # reorder
-    RDM_data = RDM_data[:, :, flat_class_img_idx]
-    class_labels = class_labels[class_class_idx]
-    img_labels = img_labels[flat_class_img_idx]
-
-    # Refresh the index values
-    del class_class_idx
-    _, class_img_idx = get_indices(class_labels, class_labels, img_labels)
-    flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
+    flat_class_img_idx = [ii for ci in img_class_idx for ii in ci]
 
     # Eliminate resting state data
     if remove_rest:
-        non_rest_idx = list(set(flat_class_img_idx) - set(class_img_idx[-1]))
+        non_rest_idx = list(set(flat_class_img_idx) - set(img_class_idx[-1]))
         corr_hists = corr_hists[:-1]
         pval_hists = pval_hists[:-1]
         RDM_data = RDM_data[:, non_rest_idx]

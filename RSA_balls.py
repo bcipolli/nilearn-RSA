@@ -16,6 +16,15 @@ from nilearn.input_data import NiftiMasker, NiftiSpheresMasker
 from nilearn.plotting import plot_roi, plot_stat_map, plot_mosaic_stat_map
 
 
+def get_class_indices(class_labels, img_labels):
+    # Find desired label indices
+    img_class_idx = []  # can vary in length
+    for ci, class_label in enumerate(class_labels):
+        img_mask = img_labels == class_label
+        img_class_idx.append(np.nonzero(img_mask)[0])
+    return img_class_idx
+
+
 def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions=None):
     if sessions is not None:
         sess_ids = np.unique(sessions)
@@ -38,9 +47,9 @@ def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions
 
         img_labels = []
         for lidx in range(n_exemplars):
-            assert len(np.unique(stim_labels[idx[lidx]])) == 1, \
-                ("All stimuli at the same position across sessions should be "
-                 "of the same stimulus class.")
+            #assert len(np.unique(stim_labels[idx[lidx]])) == 1, \
+            #    ("All stimuli at the same position across sessions should be "
+            #     "of the same stimulus class.")
             stim_img = index_img(func_img, idx[lidx].astype(int))
             img_list.append(mean_img(stim_img))
             img_labels.append(stim_labels[idx[lidx]][0])  # just one label needed.
@@ -49,6 +58,20 @@ def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions
         raise ValueError('Unrecognized grouping: %s' % grouping)
 
     return concat_imgs(img_list), np.asarray(img_labels)
+
+
+def reorder_haxby_labels(stim_labels, sessions):
+    sorted_class_labels = np.array(['face', 'house', 'cat', 'bottle', 'scissors',
+                                    'shoe', 'chair', 'scrambledpix', 'rest'])
+    sorted_stim_labels = []
+    sorted_idx = []
+    for sess_idx in np.unique(sessions):
+        img_labels = stim_labels[sessions == sess_idx]
+        sorted_idx.append(get_class_indices(sorted_class_labels, img_labels))
+        for idx in sorted_idx[-1]:
+            sorted_stim_labels += img_labels[idx]
+
+    return sorted_class_labels, np.asarray(sorted_stim_labels), sorted_idx
 
 
 class RsaSearchlight(object):
@@ -232,6 +255,18 @@ class HaxbySearchlightAnalysis(object):
         X = self.masker.transform(self.func_img)
         self.func_img = self.masker.inverse_transform(X)
 
+        # Reordering data
+        print("Sorting data...")
+        self.class_labels = reorder_haxby_labels(self.stim_labels,
+                                                 self.sessions)[0]
+        # self.class_labels, self.stim_labels, sorted_idx \
+        #     = reorder_haxby_labels(self.stim_labels, self.sessions)
+        #imgs = []
+        #for sess_idx in sorted_idx:
+        #    for img_idx in sess_idx:
+        #        imgs += nibabel.four_to_three(index_img(self.func_img, img_idx))
+        #self.func_img = concat_imgs(imgs)
+        #print self.class_labels, self.stim_labels
         # Average across sessions
         print("Averaging data...")
         self.func_img, self.img_labels = self.my_cache(average_data)(
