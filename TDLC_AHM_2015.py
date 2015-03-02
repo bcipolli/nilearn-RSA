@@ -214,7 +214,7 @@ def group_examine_correlations(detector_fn,
                                n_subj=6,
                                visualize=range(10),
                                force=False,
-                               remove_rest=False,
+                               remove_rest=True,
                                grouping='img',
                                radius=10.,
                                seeds_mask='vt',
@@ -371,11 +371,11 @@ if __name__ == '__main__':
     # compute_best_detector
     # compute_detector
     group_examine_correlations(detector_fn=compute_best_detector,
-                               n_subj=2,
-                               visualize=[0, 4, 5, 6, 7, 8],
-                               force=True,
-                               radius=10.,
-                               grouping='img',
-                               remove_rest=True)
+                               n_subj=6,         # up to 6
+                               visualize=[5, 6],
+                               force=False,
+                               radius=5.,
+                               grouping='img',   # 'img' or 'class'
+                               seeds_mask='vt')  # 'vt' or 'all'
 
     plt.show()
