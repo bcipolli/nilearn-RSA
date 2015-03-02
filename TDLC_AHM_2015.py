@@ -89,7 +89,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     shelf_key = 'r%.2f s%.2f g%s subj%02d' % (radius, smoothing_fwhm or 0., grouping, subj_idx)
 
     if not force:
-        print("Loading from shelf...")
+        print("Loading subject %s from shelf %s..." % (subj_idx, analysis_filename))
         shelf = shelve.open(analysis_filename)
         try:
             analysis = shelf[shelf_key]
