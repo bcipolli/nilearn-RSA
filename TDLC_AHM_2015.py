@@ -81,7 +81,8 @@ def compute_stats(RDM_data, img_labels, detector_fn):
 
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                          grouping='img', smoothing_fwhm=None,
-                         force=False, visualize=True, standardize=True):
+                         force=False, visualize=list(range(5)),
+                         standardize=True, detrend=False):
     # Compute RSA within VT
     RSA_img_filename = 'nii/haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'nii/haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
@@ -134,18 +135,14 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     # nibabel.save(corr_img, corr_img_filename)
 
     # Plot the result
-    if visualize:
-        analysis.visualize_func_img()
-        analysis.searchlight.visualize_comparisons(
-            similarity_comparisons=analysis.similarity_comparisons,
-            labels=analysis.img_labels, anat_img=analysis.anat_img)
+    if 0 in visualize:
         analysis.searchlight.visualize_comparisons_std(
             similarity_std=analysis.similarity_std,
             anat_img=analysis.anat_img)
 
-        # Plot detector
+    # Plot detector
+    if 1 in visualize:
         fh1 = plt.figure(figsize=(18, 10))
-        class_imgs = []
         n_rows = int(np.round(0.75 * np.sqrt(n_classes)))
         n_cols = int(np.ceil(n_classes / float(n_rows)))
         for ci, class_label in enumerate(analysis.class_labels):
@@ -155,13 +152,12 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             ax1.imshow(sq, interpolation='nearest')
             ax1.set_title('Best detector: %s' % class_label)
 
-        # Plot correlation, p-value distributions over classes 
+    # Plot correlation, p-value distributions over classes
+    if 2 in visualize or 3 in visualize:
         fh2 = plt.figure(figsize=(18, 10))
         fh3 = plt.figure(figsize=(18, 10))
-        class_imgs = []
         for ci, class_label in enumerate(analysis.class_labels):
             idx = np.nonzero(analysis.img_labels == class_label)[0]
-            class_imgs.append(mean_img(index_img(corr_img, idx)))
 
             class_corr = voxelwise_corr[idx].mean(axis=0)
             class_pval = voxelwise_pval[idx].mean(axis=0)
@@ -173,6 +169,12 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             ax3 = fh3.add_subplot(3, 3, ci + 1)
             ax3.hist(class_pval, 25, normed=True)
             ax3.set_title('Significance values: %s' % class_label)
+
+    if 4 in visualize:
+        class_imgs = []
+        for ci, class_label in enumerate(analysis.class_labels):
+            idx = np.nonzero(analysis.img_labels == class_label)[0]
+            class_imgs.append(mean_img(index_img(corr_img, idx)))
 
         fh4 = plt.figure(figsize=(18, 10))
         titles = ['Vs. perfect %s detector' % l for l in analysis.class_labels]
@@ -206,7 +208,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
 
 def group_examine_correlations(detector_fn,
                                n_subj=6,
-                               visualize=True,
+                               visualize=range(10),
                                force=False,
                                remove_rest=False,
                                grouping='img',
@@ -270,85 +272,87 @@ def group_examine_correlations(detector_fn,
         n_imgs = len(img_labels)
 
     # Plot mean (over subjects) correlation and p-value histograms
-    fh1 = plt.figure(figsize=(18, 10))
-    fh2 = plt.figure(figsize=(18, 10))
-    bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
-                                        for bi in range(1, len(bins))])
-    bar_width = lambda bins: bins[1] - bins[0]
-    for ci, class_label in enumerate(class_labels):
-        idx = class_labels == class_label
+    if 5 in visualize or 6 in visualize:
+        fh5 = plt.figure(figsize=(18, 10))
+        fh6 = plt.figure(figsize=(18, 10))
+        bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
+                                            for bi in range(1, len(bins))])
+        bar_width = lambda bins: bins[1] - bins[0]
+        for ci, class_label in enumerate(class_labels):
+            idx = class_labels == class_label
 
-        # FIGURE 1: Histogram of correlation values
-        mean_corr_hist = corr_hists[:, idx].mean(axis=0).flatten()
-        std_corr_hist = corr_hists[:, idx].std(axis=0).flatten()
-        ax1 = fh1.add_subplot(3, 3, ci + 1)
-        ax1.bar(bar_bins(corr_bins) - bar_width(corr_bins) / 2.,
-                mean_corr_hist * bar_width(corr_bins),
-                yerr=std_corr_hist * bar_width(corr_bins),
-                width=bar_width(corr_bins))
-        ax1.set_title('Correlation (%s)' % class_label)
-        ax1.set_ylim([0., 0.4])
-        ax1.set_xlim([-0.6, 0.6])
+            # FIGURE 1: Histogram of correlation values
+            mean_corr_hist = corr_hists[:, idx].mean(axis=0).flatten()
+            std_corr_hist = corr_hists[:, idx].std(axis=0).flatten()
+            ax5 = fh5.add_subplot(3, 3, ci + 1)
+            ax5.bar(bar_bins(corr_bins) - bar_width(corr_bins) / 2.,
+                    mean_corr_hist * bar_width(corr_bins),
+                    yerr=std_corr_hist * bar_width(corr_bins),
+                    width=bar_width(corr_bins))
+            ax5.set_title('Correlation (%s)' % class_label)
+            ax5.set_ylim([0., 0.4])
+            ax5.set_xlim([-0.6, 0.6])
 
-        # FIGURE 2: Histogram of p-values
-        mean_pval_hist = pval_hists[:, idx].mean(axis=0).flatten()
-        std_pval_hist = pval_hists[:, idx].std(axis=0).flatten()
-        ax2 = fh2.add_subplot(3, 3, ci + 1)
-        ax2.bar(bar_bins(pval_bins) - bar_width(pval_bins) / 2.,
-                mean_pval_hist * bar_width(pval_bins),
-                yerr=std_pval_hist * bar_width(corr_bins),
-                width=bar_width(pval_bins))
-        ax2.set_title('p-values (%s)' % class_label)
-        ax2.set_ylim([0., 0.2])
-        ax2.set_xlim([0., 1.0])
+            # FIGURE 2: Histogram of p-values
+            mean_pval_hist = pval_hists[:, idx].mean(axis=0).flatten()
+            std_pval_hist = pval_hists[:, idx].std(axis=0).flatten()
+            ax6 = fh6.add_subplot(3, 3, ci + 1)
+            ax6.bar(bar_bins(pval_bins) - bar_width(pval_bins) / 2.,
+                    mean_pval_hist * bar_width(pval_bins),
+                    yerr=std_pval_hist * bar_width(corr_bins),
+                    width=bar_width(pval_bins))
+            ax6.set_title('p-values (%s)' % class_label)
+            ax6.set_ylim([0., 0.2])
+            ax6.set_xlim([0., 1.0])
 
-    # FIGURE 3: Plot the mean correlation matrix
-    fh3 = plt.figure(figsize=(14, 10))
-    for subj_idx in range(n_subj + 1):
-        if subj_idx < n_subj:
-            mat = RDM_data[subj_idx]
-            subj_id = str(subj_idx)
-        else:
-            mat = RDM_data.mean(axis=0)
-            subj_id = 'mean'
-        ax3 = fh3.add_subplot(3, 3, subj_idx + 1)
-        ax3.imshow(1. - mat - np.eye(n_imgs),
-                   interpolation='nearest',
-                   vmin=-1., vmax=1.)
-        ax3.set_title('Subject %s dissimilarity' % subj_id)
+    # FIGURE 7: Plot the mean correlation matrix as an image.
+    if 7 in visualize:
+        fh7 = plt.figure(figsize=(14, 10))
+        for subj_idx in range(n_subj + 1):
+            if subj_idx < n_subj:
+                mat = RDM_data[subj_idx]
+                subj_id = str(subj_idx)
+            else:
+                mat = RDM_data.mean(axis=0)
+                subj_id = 'mean'
+            ax7 = fh7.add_subplot(3, 3, subj_idx + 1)
+            ax7.imshow(1. - mat,
+                       interpolation='nearest',
+                       vmin=-1., vmax=1.)
+            ax7.set_title('Subject %s dissimilarity' % subj_id)
 
-        ax3.set_yticks(np.arange(0, n_imgs, n_imgperclass) + n_imgperclass / 2.)
-        ax3.set_yticklabels(class_labels)
-        ax3.set_xticks([])  # remove x-ticks
+            ax7.set_yticks(np.arange(0, n_imgs, n_imgperclass) + n_imgperclass / 2.)
+            ax7.set_yticklabels(class_labels)
+            ax7.set_xticks([])  # remove x-ticks
 
-    # FIGURE 4: Plot haxby figure (ish)
-    confusion_mat = 1. - RDM_data.mean(axis=0)
-    confusion_mat = confusion_mat
-    short_class_labels = [lbl[:5] for lbl in class_labels]
-    fh4 = plt.figure(figsize=(12, 10))
-    plt_order = [1, 3, 5, 7, 2, 4, 6, 8, 9]
-    for ci, class_label in enumerate(class_labels):
-        idx1 = img_labels == class_label
+    # FIGURE 8: Plot haxby figure (ish)
+    if 8 in visualize:
+        confusion_mat = 1. - RDM_data.mean(axis=0)
+        confusion_mat = confusion_mat
+        short_class_labels = [lbl[:5] for lbl in class_labels]
+        fh8 = plt.figure(figsize=(12, 10))
+        plt_order = [1, 3, 5, 7, 2, 4, 6, 8, 9]
+        for ci, class_label in enumerate(class_labels):
+            idx1 = img_labels == class_label
 
-        bars_mean = np.empty(n_classes)
-        bars_std = np.empty(n_classes)
-        for ci2, class_label2 in enumerate(class_labels):
-            idx2 = img_labels == class_label2
-            cur_mat = confusion_mat[idx1]
-            cur_mat = cur_mat[:, idx2]
-            bars_mean[ci2] = cur_mat.mean()
-            bars_std[ci2] = cur_mat.std()
+            bars_mean = np.empty(n_classes)
+            bars_std = np.empty(n_classes)
+            for ci2, class_label2 in enumerate(class_labels):
+                idx2 = img_labels == class_label2
+                cur_mat = confusion_mat[idx1]
+                cur_mat = cur_mat[:, idx2]
+                bars_mean[ci2] = cur_mat.mean()
+                bars_std[ci2] = cur_mat.std()
 
-        n_rows = 4 if remove_rest else 3
-        n_cols = 2 if remove_rest else 3
-        ax4 = fh4.add_subplot(n_rows, n_cols, plt_order[ci])
-        ax4.bar(np.arange(n_classes) - 0.5, bars_mean, yerr=bars_std)
-        ax4.set_title(class_label)
-        ax4.set_xticks(list(range(n_classes)))
-        ax4.set_xticklabels(short_class_labels)
-        ax4.set_ylim([-0.2, 1.0])
-    fh4.subplots_adjust(hspace=0.4)
-    plt.show()
+            n_rows = 4 if remove_rest else 3
+            n_cols = 2 if remove_rest else 3
+            ax8 = fh8.add_subplot(n_rows, n_cols, plt_order[ci])
+            ax8.bar(np.arange(n_classes) - 0.5, bars_mean, yerr=bars_std)
+            ax8.set_title(class_label)
+            ax8.set_xticks(list(range(n_classes)))
+            ax8.set_xticklabels(short_class_labels)
+            ax8.set_ylim([-0.2, 1.0])
+        fh8.subplots_adjust(hspace=0.4)
 
 
 if __name__ == '__main__':
@@ -361,8 +365,10 @@ if __name__ == '__main__':
     # compute_detector
     group_examine_correlations(detector_fn=compute_best_detector,
                                n_subj=2,
-                               visualize=False,
+                               visualize=[0, 4, 5, 6, 7, 8],
                                force=True,
                                radius=10.,
                                grouping='img',
                                remove_rest=True)
+
+    plt.show()
