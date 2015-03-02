@@ -13,7 +13,7 @@ import shelve
 from scipy.stats import pearsonr
 from scipy.spatial.distance import squareform
 
-# import nibabel
+import nibabel
 from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
@@ -80,13 +80,16 @@ def compute_correlations(RDM_data, img_labels, detector_fn):
 
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                          grouping='img', smoothing_fwhm=None,
+                         seeds_mask='vt',
                          force=False, visualize=list(range(5)),
                          standardize=True, detrend=False):
-    # Compute RSA within VT
+
+    # Compute filenames for loading / saving.
     RSA_img_filename = 'nii/haxby_RSA_searchlight_subj%02d.nii' % subj_idx
     corr_img_filename = 'nii/haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
     analysis_filename = 'db/haxby_RSA_analysis_subj%02d.db' % subj_idx
-    shelf_key = 'r%.2f s%.2f g%s subj%02d' % (radius, smoothing_fwhm or 0., grouping, subj_idx)
+    shelf_key = 'r%.2f s%.2f g%s m%s subj%02d' % (radius, smoothing_fwhm or 0.,
+                                                  grouping, seeds_mask, subj_idx )
 
     if not force:
         print("Loading subject %s from shelf %s..." % (subj_idx, analysis_filename))
@@ -111,12 +114,17 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                                             grouping=grouping,
                                             standardize=standardize)
         analysis.fit()
-        analysis.transform(seeds_img=analysis.vt_mask_img)
-        # analysis.save(RSA_img_filename)
-    print("Mean # voxels: %.2f" % np.asarray(analysis.n_voxels).mean())
+
+        if seeds_mask == 'all':
+            analysis.transform(seeds_img=analysis.mask_img)
+        elif seeds_mask == 'vt':
+            analysis.transform(seeds_img=analysis.vt_mask_img)
+        else:
+            raise ValueError("Unknown mask name: %s" % seeds_mask)
 
     # Compare the result to the optimally object-selective DSM
     print("Computing stats...")
+    print("\tMean # voxels: %.2f" % np.asarray(analysis.n_voxels).mean())
     n_classes = len(analysis.class_labels)
     n_imgs = len(analysis.img_labels)
     n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
@@ -131,7 +139,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     # Save the result
     sphere_masker = analysis.searchlight.sphere_masker
     corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-    # nibabel.save(corr_img, corr_img_filename)
+    nibabel.save(corr_img, corr_img_filename)
 
     # Plot the result
     if 0 in visualize:
@@ -212,6 +220,7 @@ def group_examine_correlations(detector_fn,
                                remove_rest=False,
                                grouping='img',
                                radius=10.,
+                               seeds_mask='vt',
                                smoothing_fwhm=None,
                                standardize=True):
     n_bins = 25
@@ -236,6 +245,7 @@ def group_examine_correlations(detector_fn,
             radius=radius,
             smoothing_fwhm=smoothing_fwhm,
             grouping=grouping,
+            seeds_mask=seeds_mask,
             force=force,
             visualize=visualize,
             standardize=standardize)
