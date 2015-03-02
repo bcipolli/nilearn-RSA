@@ -94,12 +94,12 @@ def get_indices(sorted_class_labels, class_labels, img_labels):
 
 
 def examine_correlations(detector_fn, subj_idx=0, radius=10.,
-                         grouping='class', smoothing_fwhm=None,
+                         grouping='img', smoothing_fwhm=None,
                          force=False, visualize=True, standardize=True):
     # Compute RSA within VT
-    RSA_img_filename = 'haxby_RSA_searchlight_subj%02d.nii' % subj_idx
-    corr_img_filename = 'haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
-    analysis_filename = 'haxby_RSA_analysis_subj%02d.db' % subj_idx
+    RSA_img_filename = 'nii/haxby_RSA_searchlight_subj%02d.nii' % subj_idx
+    corr_img_filename = 'nii/haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
+    analysis_filename = 'db/haxby_RSA_analysis_subj%02d.db' % subj_idx
     shelf_key = 'r%.2f s%.2f g%s subj%02d' % (radius, smoothing_fwhm or 0., grouping, subj_idx)
 
     if not force:
@@ -109,7 +109,7 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             analysis = shelf[shelf_key]
             for prop in ['subj_idx', 'radius', 'grouping',
                          'smoothing_fwhm', 'standardize']:
-                assert getattr(analysis, prop) == locals[prop], \
+                assert getattr(analysis, prop) == locals()[prop], \
                         "analysis value didn't match for %s." % prop
             analysis.loaded = True
         except Exception as e:
@@ -223,15 +223,15 @@ def group_examine_correlations(detector_fn,
                                visualize=True,
                                force=False,
                                remove_rest=False,
-                               grouping='class',
+                               grouping='img',
                                radius=10.,
                                smoothing_fwhm=None,
-                               standardize=True,
-                               resort_stims=False):
+                               standardize=True):
     n_bins = 25
     sorted_class_labels = ['face', 'house', 'cat', 'bottle', 'scissors',
                            'shoe', 'chair', 'scrambledpix', 'rest']
     n_classes = len(sorted_class_labels)
+    n_classes = 9
     n_imgs = n_classes if grouping == 'class' else 121
     n_imgperclass = n_imgs / n_classes
 
@@ -273,18 +273,17 @@ def group_examine_correlations(detector_fn,
             pval_hists[subj_idx, class_class_idx[ci]], _ = np.histogram(pval[idx].flatten(), pval_bins, density=True)
 
     # Reorder data
-    if resort_stims:
-        class_class_idx, class_img_idx = get_indices(sorted_class_labels, class_labels, img_labels)
-        flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
-        corr_hists = corr_hists[:, class_class_idx]
-        pval_hists = pval_hists[:, class_class_idx]
-        RDM_data = RDM_data[:, flat_class_img_idx]  # reorder
-        RDM_data = RDM_data[:, :, flat_class_img_idx]
-        class_labels = class_labels[class_class_idx]
-        img_labels = img_labels[flat_class_img_idx]
+    class_class_idx, class_img_idx = get_indices(sorted_class_labels, class_labels, img_labels)
+    flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
+    corr_hists = corr_hists[:, class_class_idx]
+    pval_hists = pval_hists[:, class_class_idx]
+    RDM_data = RDM_data[:, flat_class_img_idx]  # reorder
+    RDM_data = RDM_data[:, :, flat_class_img_idx]
+    class_labels = class_labels[class_class_idx]
+    img_labels = img_labels[flat_class_img_idx]
 
-        # Refresh the index values
-        del class_class_idx
+    # Refresh the index values
+    del class_class_idx
     _, class_img_idx = get_indices(class_labels, class_labels, img_labels)
     flat_class_img_idx = [ii for ci in class_img_idx for ii in ci]
 
@@ -383,15 +382,17 @@ def group_examine_correlations(detector_fn,
 
 
 if __name__ == '__main__':
+    # Directories for output images and shelve db's
+    for dir_name in ['nii', 'db']:
+        if not os.path.exists(dir_name):
+            os.mkdir(dir_name)
+
     # compute_best_detector
     # compute_detector
     group_examine_correlations(detector_fn=compute_best_detector,
                                n_subj=2,
-                               visualize=True,
-                               force=False,
+                               visualize=False,
+                               force=True,
                                radius=10.,
-                               smoothing_fwhm=None,
                                grouping='img',
-                               standardize=True,
-                               remove_rest=True,
-                               resort_stims=True)
+                               remove_rest=True)
