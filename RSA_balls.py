@@ -10,36 +10,46 @@ import nibabel
 from scipy.spatial.distance import pdist
 
 from nilearn import datasets
-from nilearn._utils import concat_niimgs
 from nilearn._utils.cache_mixin import cache
-from nilearn.image import index_img, mean_img
+from nilearn.image import concat_imgs, index_img, mean_img
 from nilearn.input_data import NiftiMasker, NiftiSpheresMasker
 from nilearn.plotting import plot_roi, plot_stat_map, plot_mosaic_stat_map
 
 
-def average_data(grouping, func_img, stim_labels, sessions=None):
-    class_labels = np.unique(stim_labels)
+def get_class_indices(class_labels, img_labels):
+    # Find desired label indices
+    img_class_idx = []  # can vary in length
+    for ci, class_label in enumerate(class_labels):
+        img_mask = img_labels == class_label
+        img_class_idx.append(np.nonzero(img_mask)[0])
+    return img_class_idx
+
+
+def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions=None):
     if sessions is not None:
         sess_ids = np.unique(sessions)
 
     img_list = []
     if grouping == 'class':
-        for class_label in class_labels:
+        for class_label in ordered_class_labels:
             stim_idx = stim_labels == class_label
             stim_img = index_img(func_img, stim_idx)
             img_list.append(mean_img(stim_img))
-        img_labels = class_labels
+        img_labels = ordered_class_labels
 
     elif grouping == 'img':
         n_sess = len(sess_ids)
         n_exemplars = stim_labels.shape[0] / n_sess
 
-        idx = np.empty((n_exemplars, len(sess_ids)), dtype=int)
-        for sid in sess_ids:
-            idx[:, sid] = np.nonzero(sessions == sid)[0]
-
+        idx = np.empty((n_exemplars, n_sess), dtype=int)
+        for sidx, sess_id in enumerate(sess_ids):
+            idx[:, sidx] = np.nonzero(sessions == sess_id)[0]
+            idx[:, sidx] = idx[np.argsort(stim_labels[idx[:, sidx]]), sidx]
         img_labels = []
         for lidx in range(n_exemplars):
+            #assert len(np.unique(stim_labels[idx[lidx]])) == 1, \
+            #    ("All stimuli at the same position across sessions should be "
+            #     "of the same stimulus class.")
             stim_img = index_img(func_img, idx[lidx].astype(int))
             img_list.append(mean_img(stim_img))
             img_labels.append(stim_labels[idx[lidx]][0])  # just one label needed.
@@ -47,7 +57,23 @@ def average_data(grouping, func_img, stim_labels, sessions=None):
     else:
         raise ValueError('Unrecognized grouping: %s' % grouping)
 
-    return concat_niimgs(img_list), np.asarray(img_labels)
+    return concat_imgs(img_list), np.asarray(img_labels)
+
+
+def reorder_haxby_labels(stim_labels, sessions):
+    # output sorted_idx is a relative index (relative to all images
+    #    from within a session)
+    sorted_class_labels = np.array(['face', 'house', 'cat', 'bottle', 'scissors',
+                                    'shoe', 'chair', 'scrambledpix', 'rest'])
+    sorted_stim_labels = []
+    sorted_idx = []
+    for sess_idx in np.unique(sessions):
+        img_labels = stim_labels[sessions == sess_idx]
+        sorted_idx.append(get_class_indices(sorted_class_labels, img_labels))
+        for idx in sorted_idx[-1]:
+            sorted_stim_labels += img_labels[idx]
+
+    return sorted_class_labels, np.asarray(sorted_stim_labels), sorted_idx
 
 
 class RsaSearchlight(object):
@@ -178,9 +204,11 @@ class HaxbySearchlightAnalysis(object):
         self.dataset = dataset
         self.subj_idx = subj_idx
         self.radius = radius
+        self.grouping = grouping
+
+        # Masking params
         self.smoothing_fwhm = smoothing_fwhm
         self.standardize = standardize
-        self.grouping = grouping
 
         # Caching stuff
         self.memory_params = memory_params or dict(memory='nilearn_cache',
@@ -194,15 +222,25 @@ class HaxbySearchlightAnalysis(object):
         print("Loading data...")
         dataset_fn = getattr(datasets, 'fetch_%s' % self.dataset)
         dataset_files = dataset_fn(n_subjects=self.subj_idx + 1)
+        metadata = np.recfromcsv(dataset_files.session_target[self.subj_idx],
+                                 delimiter=" ")
         self.func_img = nibabel.load(dataset_files.func[self.subj_idx])
         self.vt_mask_img = nibabel.load(dataset_files.mask_vt[self.subj_idx])
         self.anat_img = (dataset_files.anat[self.subj_idx] and
                          nibabel.load(dataset_files.anat[self.subj_idx]))
-        self.metadata = np.recfromcsv(dataset_files.session_target[self.subj_idx],
-                                      delimiter=" ")
-        self.stim_labels = np.asarray(self.metadata['labels'])
-        self.class_labels = np.unique(self.stim_labels).tolist()
-        self.sessions = np.asarray(self.metadata['chunks'])
+        self.stim_labels = np.asarray(metadata['labels'])
+        self.class_labels = np.unique(self.stim_labels)
+        self.sessions = np.asarray(metadata['chunks'])
+        self.func_img.get_data()  # force load
+
+        # Delete bad images.
+        if self.subj_idx == 4:
+            # Note: data for the run 9 (chunk 8) of subject 5 was corrupted
+            # (from http://dev.pymvpa.org/datadb/haxby2001.html)
+            bad_idx = self.sessions == 8
+            self.func_img = index_img(self.func_img, np.logical_not(bad_idx))
+            self.stim_labels = self.stim_labels[np.logical_not(bad_idx)]
+            self.sessions = self.sessions[np.logical_not(bad_idx)]
 
         # Compute mask
         print("Computing mask...")
@@ -219,13 +257,27 @@ class HaxbySearchlightAnalysis(object):
         X = self.masker.transform(self.func_img)
         self.func_img = self.masker.inverse_transform(X)
 
+        # Reordering data
+        print("Sorting data...")
+        self.class_labels, self.stim_labels, sorted_idx \
+            = reorder_haxby_labels(self.stim_labels, self.sessions)
+        imgs = []
+        for sess_idx, sess_id in zip(sorted_idx, np.unique(self.sessions)):
+            for img_idx in sess_idx:
+                # Convert the relative img_idx (to the session start) into
+                # absolute stim_idx (over all sessions)
+                stim_idx = np.nonzero(self.sessions == sess_id)[0][img_idx]
+                imgs += nibabel.four_to_three(index_img(self.func_img, stim_idx))
+        self.func_img = concat_imgs(imgs)
+
         # Average across sessions
         print("Averaging data...")
         self.func_img, self.img_labels = self.my_cache(average_data)(
-            self.grouping,
-            self.func_img,
-            self.stim_labels,
-            self.sessions)
+            grouping=self.grouping,
+            func_img=self.func_img,
+            ordered_class_labels=self.class_labels,
+            stim_labels=self.stim_labels,
+            sessions=self.sessions)
         self.searchlight = RsaSearchlight(mask_img=self.mask_img,
                                           seeds_img=seeds_img,
                                           memory_params=self.memory_params,
@@ -250,11 +302,13 @@ class HaxbySearchlightAnalysis(object):
                                    labels=self.img_labels)
 
     def visualize_func_img(self):
+        return
         # Functional image
         fh = plt.figure(figsize=(18, 10))
-        class_img = self.my_cache(average_data)('class',
-                                                self.func_img,
-                                                self.img_labels)[0]
+        class_img = self.my_cache(average_data)(grouping='class',
+                                                func_img=self.func_img,
+                                                ordered_class_labels=self.class_labels,
+                                                img_labels=self.img_labels)[0]
         plot_mosaic_stat_map(class_img,
                              bg_img=self.anat_img, title=self.class_labels,
                              figure=fh, shape=(5, 2))
