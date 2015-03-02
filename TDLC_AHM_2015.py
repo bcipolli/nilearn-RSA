@@ -18,7 +18,7 @@ from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
 
-from RSA_balls import HaxbySearchlightAnalysis, get_class_indices
+from RSA_searchlight import HaxbySearchlightAnalysis, get_class_indices
 
 memory = Memory(cachedir='nilearn_cache', verbose=10)
 
