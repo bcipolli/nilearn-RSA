@@ -44,7 +44,7 @@ def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions
         idx = np.empty((n_exemplars, n_sess), dtype=int)
         for sidx, sess_id in enumerate(sess_ids):
             idx[:, sidx] = np.nonzero(sessions == sess_id)[0]
-
+            idx[:, sidx] = idx[np.argsort(stim_labels[idx[:, sidx]]), sidx]
         img_labels = []
         for lidx in range(n_exemplars):
             #assert len(np.unique(stim_labels[idx[lidx]])) == 1, \
