@@ -231,7 +231,10 @@ def group_examine_correlations(detector_fn,
     RDM_data = np.nan * np.zeros((n_subj, n_imgs, n_imgs))
 
     # Get all subject data; save into histograms and means.
-    corr_bins = np.linspace(-0.75, 0.75, n_bins + 1).tolist()
+    if grouping == 'img':
+        corr_bins = np.linspace(-0.10, 0.10, n_bins + 1).tolist()
+    else:
+        corr_bins = np.linspace(-0.50, 0.50, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
 
     for subj_idx in range(n_subj):
@@ -268,8 +271,8 @@ def group_examine_correlations(detector_fn,
     # Eliminate resting state data
     if remove_rest:
         non_rest_idx = list(set(flat_class_img_idx) - set(img_class_idx[-1]))
-        corr_hists = corr_hists[:-1]
-        pval_hists = pval_hists[:-1]
+        corr_hists = corr_hists[:, :-1]
+        pval_hists = pval_hists[:, :-1]
         RDM_data = RDM_data[:, non_rest_idx]
         RDM_data = RDM_data[:, :, non_rest_idx]
         class_labels = class_labels[:-1]
@@ -285,6 +288,8 @@ def group_examine_correlations(detector_fn,
         bar_bins = lambda bins: np.asarray([(bins[bi - 1] + bins[bi]) / 2.
                                             for bi in range(1, len(bins))])
         bar_width = lambda bins: bins[1] - bins[0]
+        bar_edges = lambda bins: bar_bins(bins) - bar_width(bins) / 2.
+
         for ci, class_label in enumerate(class_labels):
             idx = class_labels == class_label
 
@@ -292,24 +297,28 @@ def group_examine_correlations(detector_fn,
             mean_corr_hist = corr_hists[:, idx].mean(axis=0).flatten()
             std_corr_hist = corr_hists[:, idx].std(axis=0).flatten()
             ax5 = fh5.add_subplot(3, 3, ci + 1)
-            ax5.bar(bar_bins(corr_bins) - bar_width(corr_bins) / 2.,
+            ax5.bar(bar_edges(corr_bins),
                     mean_corr_hist * bar_width(corr_bins),
                     yerr=std_corr_hist * bar_width(corr_bins),
                     width=bar_width(corr_bins))
             ax5.set_title('Correlation (%s)' % class_label)
-            ax5.set_ylim([0., 0.4])
-            ax5.set_xlim([-0.6, 0.6])
+            y_max5 = bar_width(corr_bins) * (corr_hists.mean(0) +
+                                             corr_hists.std(0)).max()
+            ax5.set_ylim([0., y_max5 * 1.02])
+            ax5.set_xlim(np.array([-1, 1]) * np.abs(bar_edges(corr_bins)[0]))
 
             # FIGURE 2: Histogram of p-values
             mean_pval_hist = pval_hists[:, idx].mean(axis=0).flatten()
             std_pval_hist = pval_hists[:, idx].std(axis=0).flatten()
             ax6 = fh6.add_subplot(3, 3, ci + 1)
-            ax6.bar(bar_bins(pval_bins) - bar_width(pval_bins) / 2.,
+            ax6.bar(bar_edges(pval_bins),
                     mean_pval_hist * bar_width(pval_bins),
-                    yerr=std_pval_hist * bar_width(corr_bins),
+                    yerr=std_pval_hist * bar_width(pval_bins),
                     width=bar_width(pval_bins))
             ax6.set_title('p-values (%s)' % class_label)
-            ax6.set_ylim([0., 0.2])
+            y_max6 = bar_width(pval_bins) * (pval_hists.mean(0) +
+                                             pval_hists.std(0)).max()
+            ax6.set_ylim([0., y_max6 * 1.02])
             ax6.set_xlim([0., 1.0])
 
     # FIGURE 7: Plot the mean correlation matrix as an image.
