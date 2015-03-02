@@ -85,21 +85,20 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                          standardize=True, detrend=False):
 
     # Compute filenames for loading / saving.
-    RSA_img_filename = 'nii/haxby_RSA_searchlight_subj%02d.nii' % subj_idx
-    corr_img_filename = 'nii/haxby_RSA_corr2perfect_subj%02d.nii' % subj_idx
-    analysis_filename = 'db/haxby_RSA_analysis_subj%02d.db' % subj_idx
-    shelf_key = 'r%.2f s%.2f g%s m%s subj%02d' % (radius, smoothing_fwhm or 0.,
-                                                  grouping, seeds_mask, subj_idx )
+    shelve_filename = 'db/haxby_RSA_analysis_subj%02d.db' % subj_idx
+    shelve_key = 'r%.2f g%s s%.2f m%s subj%02d' % (radius, grouping,
+                                                   smoothing_fwhm or 0.,
+                                                   seeds_mask, subj_idx)
 
     if not force:
-        print("Loading subject %s from shelf %s..." % (subj_idx, analysis_filename))
-        shelf = shelve.open(analysis_filename)
+        print("Loading subject %s from %s..." % (subj_idx, shelve_filename))
+        shelf = shelve.open(shelve_filename)
         try:
-            analysis = shelf[shelf_key]
+            analysis = shelf[shelve_key]
             for prop in ['subj_idx', 'radius', 'grouping',
                          'smoothing_fwhm', 'standardize']:
                 assert getattr(analysis, prop) == locals()[prop], \
-                        "analysis value didn't match for %s." % prop
+                       "analysis value didn't match for %s." % prop
             analysis.loaded = True
         except Exception as e:
             print "Load error: %s" % e
@@ -135,11 +134,6 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
                              detector_fn=detector_fn)
     good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
     mean_RDM_data = RDM_data[good_seeds].mean(axis=0)
-
-    # Save the result
-    sphere_masker = analysis.searchlight.sphere_masker
-    corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-    nibabel.save(corr_img, corr_img_filename)
 
     # Plot the result
     if 0 in visualize:
@@ -178,6 +172,9 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
             ax3.set_title('Significance values: %s' % class_label)
 
     if 4 in visualize:
+        sphere_masker = analysis.searchlight.sphere_masker
+        corr_img = sphere_masker.inverse_transform(voxelwise_corr)
+
         class_imgs = []
         for ci, class_label in enumerate(analysis.class_labels):
             idx = np.nonzero(analysis.img_labels == class_label)[0]
@@ -197,10 +194,10 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     img_labels = np.asarray(analysis.img_labels).copy()
     if not getattr(analysis, 'loaded', False):
         print("Saving to shelf...")
-        shelf = shelve.open(analysis_filename, writeback=True)
+        shelf = shelve.open(shelve_filename, writeback=True)
         try:
             analysis.searchlight.sphere_masker.xform_fn = None
-            shelf[shelf_key] = analysis
+            shelf[shelve_key] = analysis
             shelf.sync()
             shelf.close()
         except Exception as e:
@@ -367,7 +364,7 @@ def group_examine_correlations(detector_fn,
 
 if __name__ == '__main__':
     # Directories for output images and shelve db's
-    for dir_name in ['nii', 'db']:
+    for dir_name in ['db']:
         if not os.path.exists(dir_name):
             os.mkdir(dir_name)
 
