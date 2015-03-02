@@ -61,6 +61,8 @@ def average_data(grouping, func_img, ordered_class_labels, stim_labels, sessions
 
 
 def reorder_haxby_labels(stim_labels, sessions):
+    # output sorted_idx is a relative index (relative to all images
+    #    from within a session)
     sorted_class_labels = np.array(['face', 'house', 'cat', 'bottle', 'scissors',
                                     'shoe', 'chair', 'scrambledpix', 'rest'])
     sorted_stim_labels = []
@@ -257,16 +259,17 @@ class HaxbySearchlightAnalysis(object):
 
         # Reordering data
         print("Sorting data...")
-        self.class_labels = reorder_haxby_labels(self.stim_labels,
-                                                 self.sessions)[0]
-        # self.class_labels, self.stim_labels, sorted_idx \
-        #     = reorder_haxby_labels(self.stim_labels, self.sessions)
-        #imgs = []
-        #for sess_idx in sorted_idx:
-        #    for img_idx in sess_idx:
-        #        imgs += nibabel.four_to_three(index_img(self.func_img, img_idx))
-        #self.func_img = concat_imgs(imgs)
-        #print self.class_labels, self.stim_labels
+        self.class_labels, self.stim_labels, sorted_idx \
+            = reorder_haxby_labels(self.stim_labels, self.sessions)
+        imgs = []
+        for sess_idx, sess_id in zip(sorted_idx, np.unique(self.sessions)):
+            for img_idx in sess_idx:
+                # Convert the relative img_idx (to the session start) into
+                # absolute stim_idx (over all sessions)
+                stim_idx = np.nonzero(self.sessions == sess_id)[0][img_idx]
+                imgs += nibabel.four_to_three(index_img(self.func_img, stim_idx))
+        self.func_img = concat_imgs(imgs)
+
         # Average across sessions
         print("Averaging data...")
         self.func_img, self.img_labels = self.my_cache(average_data)(
