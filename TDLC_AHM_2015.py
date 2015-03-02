@@ -56,7 +56,7 @@ def compute_detector(li, img_labels):
 
 
 @memory.cache
-def compute_stats(RDM_data, img_labels, detector_fn):
+def compute_correlations(RDM_data, img_labels, detector_fn):
     # RDM data: vector of pairwise dissimilarities
     n_imgs = len(img_labels)
     n_seeds = RDM_data.shape[0]
@@ -72,7 +72,6 @@ def compute_stats(RDM_data, img_labels, detector_fn):
         # Compare it to every voxel.
         for si in range(n_seeds):
             pr, pv = pearsonr(best_detector[idx], RDM_data[si, idx].T)
-            # pr = np.dot(best_detector[idx], RDM_data[si, idx].T) / (4.**2)
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
 
@@ -123,9 +122,9 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     n_seeds = len(analysis.searchlight.sphere_masker.seeds_)
 
     RDM_data = analysis.similarity_comparisons
-    voxelwise_corr, voxelwise_pval = compute_stats(RDM_data=RDM_data,
-                                                   img_labels=analysis.img_labels,
-                                                   detector_fn=detector_fn)
+    voxelwise_corr, voxelwise_pval = \
+        compute_correlations(RDM_data=RDM_data, img_labels=analysis.img_labels,
+                             detector_fn=detector_fn)
     good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
     mean_RDM_data = RDM_data[good_seeds].mean(axis=0).copy()
 
@@ -231,7 +230,7 @@ def group_examine_correlations(detector_fn,
 
     for subj_idx in range(n_subj):
         # Compute the RSA, correlation to the selected detector.
-        corr, pval, img_labels, class_labels, RSA_compares = examine_correlations(
+        corr, pval, img_labels, class_labels, RDM_compares = examine_correlations(
             detector_fn=detector_fn,
             subj_idx=subj_idx,
             radius=radius,
@@ -244,14 +243,14 @@ def group_examine_correlations(detector_fn,
         img_labels = np.asarray(img_labels)
 
         print "Corr: ", corr
-        print "RSA: ", RSA_compares
+        print "RDM: ", RDM_compares
         print "PVal: ", pval
 
         # Compute indices; no sorting!
         img_class_idx = get_class_indices(class_labels, img_labels)
 
         # Summarize data
-        RDM_data[subj_idx, :, :] = squareform(RSA_compares)
+        RDM_data[subj_idx, :, :] = squareform(RDM_compares)
         for ci, class_label in enumerate(class_labels):
             idx = img_class_idx[ci]
             corr_hists[subj_idx, ci], _ = np.histogram(corr[idx].flatten(), corr_bins, density=True)
