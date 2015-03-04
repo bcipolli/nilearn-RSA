@@ -55,15 +55,27 @@ def compute_detector(class_label, img_labels):
     return best_detector
 
 
+def low_rank_regression(X, Y):
+    from scipy.linalg import lstsq
+    residuals = lstsq(X, Y)[1]
+    return residuals.mean()
+
 @memory.cache
-def compute_correlations(RDM_data, img_labels, detector_fn):
+def compute_matrix_similarity(RDM_data, img_labels, class_labels, detector_fn, method='corr'):
     # RDM data: vector of pairwise dissimilarities
+    # method: corr or regress
     n_imgs = len(img_labels)
     n_classes = len(class_labels)
     n_seeds = RDM_data.shape[0]
     voxelwise_corr = np.empty((n_classes, n_seeds))
     voxelwise_pval = np.empty((n_classes, n_seeds))
 
+    if method == 'corr':
+        method_fn = pearsonr
+    elif method == 'regress':
+        method_fn = lambda x, y: (low_rank_regression(squareform(x), squareform(y)), np.nan)
+    else:
+        raise Exception("Unknown method: %s" % method)
 
     # This wil
     for ci, class_label in enumerate(class_labels):
@@ -74,9 +86,11 @@ def compute_correlations(RDM_data, img_labels, detector_fn):
 
         # Compare it to every voxel.
         for si in range(n_seeds):
-            pr, pv = pearsonr(best_detector[idx], RDM_data[si, idx].T)
-            voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
-            voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
+            if np.any(np.isnan(RDM_data[si, idx])):
+                print "nan"
+                pr = pv = np.nan
+            else:
+                pr, pv = method_fn(best_detector[idx], RDM_data[si, idx].T)
             voxelwise_corr[ci, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[ci, si] = 1. if np.isnan(pv) else pv
 
@@ -135,8 +149,9 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
 
     RDM_data = analysis.similarity_comparisons
     voxelwise_corr, voxelwise_pval = \
-        compute_correlations(RDM_data=RDM_data, img_labels=analysis.img_labels,
-                             detector_fn=detector_fn)
+        compute_matrix_similarity(RDM_data=RDM_data, img_labels=analysis.img_labels,
+                                  class_labels=analysis.class_labels,
+                                  detector_fn=detector_fn, method='corr')
     good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
     mean_RDM_data = RDM_data[good_seeds].mean(axis=0)
 
