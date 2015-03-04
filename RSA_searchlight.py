@@ -78,18 +78,23 @@ def reorder_haxby_labels(stim_labels, sessions):
 
 class RsaSearchlight(object):
 
-    def __init__(self, mask_img, seeds_img, radius=10., memory_params=None):
+    def __init__(self, mask_img, seeds_img, radius=10., distance_method='correlation',
+                 memory_params=None):
         # Defs
         self.memory_params = memory_params or dict()
         self.seeds_img = seeds_img
         self.mask_img = mask_img
         self.radius = radius
+        self.distance_method = distance_method
 
     def rsa_on_ball_axis_1(self, sphere_data):
         """
         Data: axis=1: [nvoxels, nslices]
         """
-        similarity_comparisons = pdist(sphere_data.T, 'correlation')
+
+        # sphere_data could be a single voxel; in this case, we'll get
+        # nan
+        similarity_comparisons = pdist(sphere_data.T, self.distance_method)
         self.similarity_comparisons[self.si, :] = similarity_comparisons
         self.n_voxels[self.si] = sphere_data.shape[0]
         self.si += 1
