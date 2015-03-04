@@ -135,6 +135,12 @@ class RsaSearchlight(object):
         delattr(self, 'n_voxels')
         delattr(self, 'similarity_comparisons')
 
+        # Clean up
+        good_seeds = np.logical_not(np.isnan(similarity_comparisons.mean(axis=1)))
+        n_voxels = n_voxels[good_seeds]
+        similarity_comparisons = similarity_comparisons[good_seeds]
+        similarity_std = similarity_std[:, good_seeds]  # slices x seeds
+
         return similarity_comparisons, similarity_std, n_voxels
 
     def visualize(self, similarity_comparisons, similarity_std=None,
