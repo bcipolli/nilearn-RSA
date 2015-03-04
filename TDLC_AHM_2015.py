@@ -23,7 +23,7 @@ from RSA_searchlight import HaxbySearchlightAnalysis, get_class_indices
 memory = Memory(cachedir='nilearn_cache', verbose=10)
 
 
-def compute_best_detector(li, img_labels):
+def compute_best_detector(class_label, img_labels):
     # Compute the dissimilarity matrix for the optimal detector (correlation)
     # Everything looks the same, except if it's compared to
     #   this current class.  Then, it looks completely different.
@@ -31,24 +31,24 @@ def compute_best_detector(li, img_labels):
     best_detector = np.zeros((n_imgs * (n_imgs - 1) / 2.,))
     idx = 0
     for li1 in range(n_imgs):
-        matches1 = img_labels[li1] == img_labels[li]
+        matches1 = img_labels[li1] == class_label
         for li2 in range(li1 + 1, n_imgs):
-            matches2 = img_labels[li2] == img_labels[li]
+            matches2 = img_labels[li2] == class_label
             if np.logical_xor(matches1, matches2):
                 best_detector[idx] = 1.
             idx += 1
     return best_detector
 
 
-def compute_detector(li, img_labels):
+def compute_detector(class_label, img_labels):
     # Compute the optimal dissimilarity detector (correlation)
     n_imgs = len(img_labels)
     best_detector = np.nan * np.empty((n_imgs * (n_imgs - 1) / 2.,))
     idx = 0
     for li1 in range(n_imgs):
-        matches1 = img_labels[li1] == img_labels[li]
+        matches1 = img_labels[li1] == class_label
         for li2 in range(li1 + 1, n_imgs):
-            matches2 = img_labels[li2] == img_labels[li]
+            matches2 = img_labels[li2] == class_label
             if np.logical_xor(matches1, matches2):
                 best_detector[idx] = 1.
             idx += 1
@@ -59,14 +59,17 @@ def compute_detector(li, img_labels):
 def compute_correlations(RDM_data, img_labels, detector_fn):
     # RDM data: vector of pairwise dissimilarities
     n_imgs = len(img_labels)
+    n_classes = len(class_labels)
     n_seeds = RDM_data.shape[0]
-    voxelwise_corr = np.empty((n_imgs, n_seeds))
-    voxelwise_pval = np.empty((n_imgs, n_seeds))
+    voxelwise_corr = np.empty((n_classes, n_seeds))
+    voxelwise_pval = np.empty((n_classes, n_seeds))
 
-    for li, img_label in enumerate(img_labels):
+
+    # This wil
+    for ci, class_label in enumerate(class_labels):
         # Retrieve the cur_count'th img_label in img_labels
         # e.g. the 3rd 'face' in img_labels.
-        best_detector = detector_fn(li, img_labels)  # diag=0
+        best_detector = detector_fn(class_label, img_labels)  # diag=0
         idx = np.logical_not(np.isnan(best_detector))
 
         # Compare it to every voxel.
@@ -74,6 +77,8 @@ def compute_correlations(RDM_data, img_labels, detector_fn):
             pr, pv = pearsonr(best_detector[idx], RDM_data[si, idx].T)
             voxelwise_corr[li, si] = 0. if np.isnan(pr) else pr
             voxelwise_pval[li, si] = 1. if np.isnan(pv) else pv
+            voxelwise_corr[ci, si] = 0. if np.isnan(pr) else pr
+            voxelwise_pval[ci, si] = 1. if np.isnan(pv) else pv
 
     return voxelwise_corr, voxelwise_pval
 
@@ -158,31 +163,20 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
         fh2 = plt.figure(figsize=(18, 10))
         fh3 = plt.figure(figsize=(18, 10))
         for ci, class_label in enumerate(analysis.class_labels):
-            idx = np.nonzero(analysis.img_labels == class_label)[0]
-
-            class_corr = voxelwise_corr[idx].mean(axis=0)
-            class_pval = voxelwise_pval[idx].mean(axis=0)
-
             ax2 = fh2.add_subplot(3, 3, ci + 1)
-            ax2.hist(class_corr, bins=25, normed=True)
+            ax2.hist(voxelwise_corr[ci], bins=25, normed=True)
             ax2.set_title('Correlation values: %s' % class_label)
 
             ax3 = fh3.add_subplot(3, 3, ci + 1)
-            ax3.hist(class_pval, 25, normed=True)
+            ax3.hist(voxelwise_pval[ci], bins=25, normed=True)
             ax3.set_title('Significance values: %s' % class_label)
 
     if 4 in visualize:
         sphere_masker = analysis.searchlight.sphere_masker
-        corr_img = sphere_masker.inverse_transform(voxelwise_corr)
-
-        class_imgs = []
-        for ci, class_label in enumerate(analysis.class_labels):
-            idx = np.nonzero(analysis.img_labels == class_label)[0]
-            class_imgs.append(mean_img(index_img(corr_img, idx)))
+        class_img = sphere_masker.inverse_transform(voxelwise_corr)
 
         fh4 = plt.figure(figsize=(18, 10))
         titles = ['Vs. perfect %s detector' % l for l in analysis.class_labels]
-        class_img = concat_imgs(class_imgs)
         plot_mosaic_stat_map(class_img, colorbar=True, figure=fh4,
                              bg_img=analysis.anat_img,
                              display_mode='z', cut_coords=1,
@@ -262,23 +256,23 @@ def group_examine_correlations(detector_fn,
         # Summarize data
         RDM_data[subj_idx, :, :] = squareform(RDM_compares)
         for ci, class_label in enumerate(class_labels):
-            idx = img_class_idx[ci]
-            corr_hists[subj_idx, ci], _ = np.histogram(corr[idx].flatten(), corr_bins, density=True)
-            pval_hists[subj_idx, ci], _ = np.histogram(pval[idx].flatten(), pval_bins, density=True)
+            corr_hists[subj_idx, ci], _ = np.histogram(corr[ci], corr_bins, density=True)
+            pval_hists[subj_idx, ci], _ = np.histogram(pval[ci], pval_bins, density=True)
 
     flat_class_img_idx = [ii for ci in img_class_idx for ii in ci]
 
     # Eliminate resting state data
     if remove_rest:
-        non_rest_idx = list(set(flat_class_img_idx) - set(img_class_idx[-1]))
-        corr_hists = corr_hists[:, :-1]
-        pval_hists = pval_hists[:, :-1]
-        RDM_data = RDM_data[:, non_rest_idx]
-        RDM_data = RDM_data[:, :, non_rest_idx]
-        class_labels = class_labels[:-1]
-        img_labels = img_labels[non_rest_idx]
+        non_rest_class_idx = range(0, 8)
+        non_rest_img_idx = list(set(flat_class_img_idx) - set(img_class_idx[-1]))
+        corr_hists = corr_hists[:, non_rest_class_idx]
+        pval_hists = pval_hists[:, non_rest_class_idx]
+        RDM_data = RDM_data[:, non_rest_img_idx]
+        RDM_data = RDM_data[:, :, non_rest_img_idx]
+        class_labels = class_labels[non_rest_class_idx]
+        img_labels = img_labels[non_rest_img_idx]
         n_classes = len(class_labels)
-        n_imgperclass = n_imgperclass[:-1]
+        n_imgperclass = n_imgperclass[non_rest_class_idx]
         n_imgs = len(img_labels)
 
     # Plot mean (over subjects) correlation and p-value histograms
@@ -291,11 +285,9 @@ def group_examine_correlations(detector_fn,
         bar_edges = lambda bins: bar_bins(bins) - bar_width(bins) / 2.
 
         for ci, class_label in enumerate(class_labels):
-            idx = class_labels == class_label
-
             # FIGURE 1: Histogram of correlation values
-            mean_corr_hist = corr_hists[:, idx].mean(axis=0).flatten()
-            std_corr_hist = corr_hists[:, idx].std(axis=0).flatten()
+            mean_corr_hist = corr_hists[:, ci].mean(axis=0).flatten()
+            std_corr_hist = corr_hists[:, ci].std(axis=0).flatten()
             ax5 = fh5.add_subplot(3, 3, ci + 1)
             ax5.bar(bar_edges(corr_bins),
                     mean_corr_hist * bar_width(corr_bins),
@@ -308,8 +300,8 @@ def group_examine_correlations(detector_fn,
             ax5.set_xlim(np.array([-1, 1]) * np.abs(bar_edges(corr_bins)[0]))
 
             # FIGURE 2: Histogram of p-values
-            mean_pval_hist = pval_hists[:, idx].mean(axis=0).flatten()
-            std_pval_hist = pval_hists[:, idx].std(axis=0).flatten()
+            mean_pval_hist = pval_hists[:, ci].mean(axis=0).flatten()
+            std_pval_hist = pval_hists[:, ci].std(axis=0).flatten()
             ax6 = fh6.add_subplot(3, 3, ci + 1)
             ax6.bar(bar_edges(pval_bins),
                     mean_pval_hist * bar_width(pval_bins),
