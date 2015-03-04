@@ -97,11 +97,11 @@ def compute_matrix_similarity(RDM_data, img_labels, class_labels, detector_fn, m
     return voxelwise_corr, voxelwise_pval
 
 
-def examine_correlations(detector_fn, subj_idx=0, radius=10.,
-                         grouping='img', smoothing_fwhm=None,
-                         seeds_mask='vt',
-                         force=False, visualize=list(range(5)),
-                         standardize=True, detrend=False):
+def examine_RDM(detector_fn, subj_idx=0, radius=10.,
+                grouping='img', smoothing_fwhm=None,
+                seeds_mask='vt',
+                force=False, visualize=list(range(5)),
+                standardize=True, detrend=False):
 
     # Compute filenames for loading / saving.
     shelve_filename = 'db/haxby_RSA_analysis_subj%02d.db' % subj_idx
@@ -219,16 +219,11 @@ def examine_correlations(detector_fn, subj_idx=0, radius=10.,
     return voxelwise_corr, voxelwise_pval, img_labels, class_labels, mean_RDM_data
 
 
-def group_examine_correlations(detector_fn,
-                               n_subj=6,
-                               visualize=range(10),
-                               force=False,
-                               remove_rest=True,
-                               grouping='img',
-                               radius=10.,
-                               seeds_mask='vt',
-                               smoothing_fwhm=None,
-                               standardize=True):
+def group_examine_RDM(detector_fn, n_subj=6,
+                      visualize=range(10), force=False,
+                      remove_rest=True, grouping='img',
+                      radius=10., seeds_mask='vt',
+                      smoothing_fwhm=None, standardize=True):
     n_bins = 25
     n_classes = 9
     n_imgperclass = np.asarray([9] * 8 + [49])  # rest has 49
@@ -248,7 +243,7 @@ def group_examine_correlations(detector_fn,
 
     for subj_idx in range(n_subj):
         # Compute the RSA, correlation to the selected detector.
-        corr, pval, img_labels, class_labels, RDM_compares = examine_correlations(
+        corr, pval, img_labels, class_labels, RDM_compares = examine_RDM(
             detector_fn=detector_fn,
             subj_idx=subj_idx,
             radius=radius,
@@ -386,12 +381,12 @@ if __name__ == '__main__':
 
     # compute_best_detector
     # compute_detector
-    group_examine_correlations(detector_fn=compute_best_detector,
-                               n_subj=6,         # up to 6
-                               visualize=[5, 6],
-                               force=False,
-                               radius=5.,
-                               grouping='img',   # 'img' or 'class'
-                               seeds_mask='vt')  # 'vt' or 'all'
+    group_examine_RDM(detector_fn=compute_best_detector,
+                      n_subj=6,         # up to 6
+                      visualize=[5, 6, 7, 8],
+                      force=True,
+                      radius=5.,
+                      grouping='img',   # 'img' or 'class'
+                      seeds_mask='vt')  # 'vt' or 'all'
 
     plt.show()
