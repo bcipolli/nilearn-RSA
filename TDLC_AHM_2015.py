@@ -10,13 +10,15 @@ sys.path = [os.path.join(script_dir, 'nilearn')] + sys.path
 import matplotlib.pyplot as plt
 import numpy as np
 import shelve
-from scipy.stats import pearsonr
+from numpy.linalg import pinv, norm
 from scipy.spatial.distance import squareform
+from scipy.stats import pearsonr
 
 import nibabel
 from nilearn.image import index_img, concat_imgs, mean_img
 from nilearn.plotting import plot_mosaic_stat_map
 from sklearn.externals.joblib import Memory
+from sklearn import linear_model
 
 from RSA_searchlight import HaxbySearchlightAnalysis, get_class_indices
 
@@ -56,11 +58,13 @@ def compute_detector(class_label, img_labels):
 
 
 def low_rank_regression(X, Y):
-    from scipy.linalg import lstsq
-    residuals = lstsq(X, Y)[1]
-    return residuals.mean()
+    M_hat = np.dot(pinv(X), Y)  # eqn 15
+    Y_hat = np.dot(X, M_hat)  # eqn 16
+    resid = norm(M_hat - Y_hat) / norm(Y)
+    return resid
 
-@memory.cache
+ 
+#@memory.cache
 def compute_matrix_similarity(RDM_data, img_labels, class_labels, detector_fn, method='corr'):
     # RDM data: vector of pairwise dissimilarities
     # method: corr or regress
@@ -73,7 +77,7 @@ def compute_matrix_similarity(RDM_data, img_labels, class_labels, detector_fn, m
     if method == 'corr':
         method_fn = pearsonr
     elif method == 'regress':
-        method_fn = lambda x, y: (low_rank_regression(squareform(x), squareform(y)), np.nan)
+        method_fn = lambda x, y: (1. - low_rank_regression(squareform(x), squareform(y)), np.nan)
     else:
         raise Exception("Unknown method: %s" % method)
 
@@ -86,6 +90,8 @@ def compute_matrix_similarity(RDM_data, img_labels, class_labels, detector_fn, m
 
         # Compare it to every voxel.
         for si in range(n_seeds):
+            if si % 100 == 99:
+                print "%d of %d ..." % (si + 1, n_seeds)
             if np.any(np.isnan(RDM_data[si, idx])):
                 print "nan"
                 pr = pv = np.nan
@@ -151,7 +157,7 @@ def examine_RDM(detector_fn, subj_idx=0, radius=10.,
     voxelwise_corr, voxelwise_pval = \
         compute_matrix_similarity(RDM_data=RDM_data, img_labels=analysis.img_labels,
                                   class_labels=analysis.class_labels,
-                                  detector_fn=detector_fn, method='corr')
+                                  detector_fn=detector_fn, method='regress')
     good_seeds = np.logical_not(np.isnan(RDM_data.mean(axis=1)))
     mean_RDM_data = RDM_data[good_seeds].mean(axis=0)
 
@@ -236,7 +242,7 @@ def group_examine_RDM(detector_fn, n_subj=6,
 
     # Get all subject data; save into histograms and means.
     if grouping == 'img':
-        corr_bins = np.linspace(-0.10, 0.10, n_bins + 1).tolist()
+        corr_bins = np.linspace(0., 1., n_bins + 1).tolist()
     else:
         corr_bins = np.linspace(-0.50, 0.50, n_bins + 1).tolist()
     pval_bins = np.linspace(0., 1., n_bins + 1).tolist()
@@ -307,7 +313,7 @@ def group_examine_RDM(detector_fn, n_subj=6,
             y_max5 = bar_width(corr_bins) * (corr_hists.mean(0) +
                                              corr_hists.std(0)).max()
             ax5.set_ylim([0., y_max5 * 1.02])
-            ax5.set_xlim(np.array([-1, 1]) * np.abs(bar_edges(corr_bins)[0]))
+            ax5.set_xlim(bar_edges(corr_bins)[[0, -1]])
 
             # FIGURE 2: Histogram of p-values
             mean_pval_hist = pval_hists[:, ci].mean(axis=0).flatten()
@@ -384,7 +390,7 @@ if __name__ == '__main__':
     group_examine_RDM(detector_fn=compute_best_detector,
                       n_subj=6,         # up to 6
                       visualize=[5, 6, 7, 8],
-                      force=True,
+                      force=False,
                       radius=5.,
                       grouping='img',   # 'img' or 'class'
                       seeds_mask='vt')  # 'vt' or 'all'
